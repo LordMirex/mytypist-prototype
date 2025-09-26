@@ -1,0 +1,27 @@
+<!-- templates/results.html -->
+{% extends 'base.html' %}
+{% block title %}Document Generated{% endblock %}
+{% block content %}
+    <div class="alert alert-success text-center">
+        <h2>Document Generated Successfully!</h2>
+        <p>Your document has been created and is ready for download.</p>
+    </div>
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>Document Details</h5>
+        </div>
+        <div class="card-body">
+            <p><strong>Template:</strong> {{ document.template.name }}</p>
+            <p><strong>Type:</strong> {{ document.template.type|capitalize }}</p>
+            <p><strong>Created For:</strong> {{ document.user_name }}</p>
+            <p><strong>Generated At:</strong> {{ document.created_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
+        </div>
+    </div>
+    <div class="text-center">
+        <a href="/download/{{ document.id }}/docx" class="btn btn-primary me-2">Download DOCX</a>
+        <a href="/download/{{ document.id }}/pdf" class="btn btn-secondary me-2">Download PDF</a>
+        <a href="/" class="btn btn-info me-2">Back to Home</a>
+        <a href="/batch" class="btn btn-info me-2">Batch Generate</a>
+        <a href="/create/{{ document.template.id }}" class="btn btn-success">Create Another</a>
+    </div>
+{% endblock %}

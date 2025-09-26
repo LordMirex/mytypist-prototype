@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Fill Details for {{ template.name }}{% endblock %}
+{% block content %}
+    <h1 class="mb-4">Fill Details for {{ template.name }}</h1>
+    <form method="POST" action="/generate" class="card p-4">
+        <input type="hidden" name="template_id" value="{{ template.id }}">
+        {% for ph in placeholders %}
+            <div class="mb-3">
+                <label for="{{ ph.name }}" class="form-label">{{ ph.display_name or ph.name.replace('_', ' ')|title }} {% if ph.is_required %}<span class="text-danger">*</span>{% endif %}</label>
+                {% if ph.placeholder_type == 'date' %}
+                    <input type="date" class="form-control" id="{{ ph.name }}" name="{{ ph.name }}" {% if ph.is_required %}required{% endif %}>
+                {% elif ph.placeholder_type == 'option' %}
+                    <select class="form-select" id="{{ ph.name }}" name="{{ ph.name }}" {% if ph.is_required %}required{% endif %}>
+                        <option value="" disabled selected>Select an option</option>
+                        {% for option in json.loads(ph.options or '[]') %}
+                            <option value="{{ option }}">{{ option }}</option>
+                        {% endfor %}
+                    </select>
+                {% else %}
+                    <input type="{{ ph.placeholder_type }}" class="form-control" id="{{ ph.name }}" name="{{ ph.name }}" 
+                           {% if ph.default_value %}placeholder="{{ ph.default_value }}"{% endif %}
+                           {% if ph.is_required %}required{% endif %}>
+                {% endif %}
+                {% if ph.help_text %}
+                    <div class="form-text">{{ ph.help_text }}</div>
+                {% endif %}
+            </div>
+        {% endfor %}
+        <div class="d-flex justify-content-between">
+            <button type="submit" name="format" value="docx" class="btn btn-primary">DOCX</button>
+            <a href="/" class="btn btn-secondary">Back to Home</a>
+            <button type="submit" name="format" value="pdf" class="btn btn-primary">PDF</button>
+        </div>
+    </form>
+{% endblock %}

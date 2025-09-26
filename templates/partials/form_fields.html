@@ -1,0 +1,26 @@
+{% for ph in placeholders %}
+<div class="mb-3">
+    <label for="{{ ph.name }}" class="form-label">{{ ph.display_name or ph.name.replace('_', ' ')|title }} {% if ph.is_required %}<span class="text-danger">*</span>{% endif %}</label>
+    {% if ph.placeholder_type == 'date' %}
+        <input type="date" class="form-control" id="{{ ph.name }}" name="{{ ph.name }}" {% if ph.is_required %}required{% endif %}>
+    {% elif ph.placeholder_type == 'option' %}
+        <select class="form-select" id="{{ ph.name }}" name="{{ ph.name }}" {% if ph.is_required %}required{% endif %}>
+            <option value="" disabled selected>Select an option</option>
+            {% for option in json.loads(ph.options or '[]') %}
+                <option value="{{ option }}">{{ option }}</option>
+            {% endfor %}
+        </select>
+    {% else %}
+        <input type="{{ ph.placeholder_type }}" class="form-control" id="{{ ph.name }}" name="{{ ph.name }}" 
+               {% if ph.default_value %}placeholder="{{ ph.default_value }}"{% endif %}
+               {% if ph.is_required %}required{% endif %}>
+    {% endif %}
+    {% if ph.help_text %}
+        <div class="form-text">{{ ph.help_text }}</div>
+    {% endif %}
+</div>
+{% endfor %}
+<div class="d-flex justify-content-between">
+    <button type="submit" class="btn btn-primary">Generate</button>
+    <a href="/" class="btn btn-secondary">Back</a>
+</div>

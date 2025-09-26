@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Upload Template{% endblock %}
+{% block content %}
+<div class="hero text-center">
+    <h1>Upload New Template</h1>
+    <p class="lead">Upload a DOCX file to create a new template.</p>
+</div>
+<div class="card">
+    <div class="card-body">
+        <form method="POST" enctype="multipart/form-data" action="{{ url_for('admin_upload_template', key=admin_key) }}">
+            <input type="hidden" name="key" value="{{ admin_key }}">
+            <div class="mb-3">
+                <label for="name" class="form-label">Template Name</label>
+                <input type="text" class="form-control" id="name" name="name" required>
+            </div>
+            <div class="mb-3">
+                <label for="type" class="form-label">Type</label>
+                <select class="form-select" id="type" name="type" required>
+                    <option value="" disabled selected>Select a type</option>
+                    <option value="Letter">Letter</option>
+                    <option value="Affidavit">Affidavit</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="description" class="form-label">Description</label>
+                <textarea class="form-control" id="description" name="description" rows="4"></textarea>
+            </div>
+            <div class="mb-3">
+                <label for="file" class="form-label">DOCX File</label>
+                <input type="file" class="form-control" id="file" name="file" accept=".docx" required>
+            </div>
+            <div class="text-center">
+                <button type="submit" class="btn btn-primary">Upload Template</button>
+                <a href="{{ url_for('admin_templates', key=admin_key) }}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

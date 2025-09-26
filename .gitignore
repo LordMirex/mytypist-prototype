@@ -1,0 +1,44 @@
+# Byte-compiled / cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+.env
+*.env
+
+# IDE / editor settings
+.vscode/
+.idea/
+*.swp
+
+# Project-specific folders
+# uploads/
+temp/
+generated/
+# db/
+# *.db
+# *.sqlite3
+
+# Logs
+*.log
+
+# Distribution / packaging
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Misc
+.DS_Store
+Thumbs.db
+.qodo/
+.claude/

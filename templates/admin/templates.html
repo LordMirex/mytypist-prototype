@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% block title %}Manage Templates{% endblock %}
+{% block content %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Manage Templates</h1>
+        <a href="{{ url_for('admin_upload_template', key=admin_key) }}" class="btn btn-primary">Upload New Template</a>
+    </div>
+    
+    <!-- Search Form -->
+    <form method="GET" class="mb-4">
+        <input type="hidden" name="key" value="{{ admin_key }}">
+        <div class="input-group">
+            <input type="text" class="form-control" name="search" value="{{ search or '' }}" placeholder="Search templates...">
+            <button class="btn btn-outline-secondary" type="submit">Search</button>
+        </div>
+    </form>
+    
+    <!-- Templates List -->
+    {% if templates.items %}
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for template in templates.items %}
+                    <tr>
+                        <td>{{ template.name }}</td>
+                        <td>{{ template.type }}</td>
+                        <td>
+                            <span class="badge bg-{{ 'success' if template.is_active else 'warning' }}">
+                                {{ 'Active' if template.is_active else 'Inactive' }}
+                            </span>
+                        </td>
+                        <td>{{ template.created_at.strftime('%Y-%m-%d') }}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('admin_edit_template', template_id=template.id, key=admin_key) }}" class="btn btn-outline-primary">Edit</a>
+                                {% if template.is_active %}
+                                    <a href="{{ url_for('admin_pause_template', template_id=template.id, key=admin_key) }}" class="btn btn-outline-warning">Pause</a>
+                                {% else %}
+                                    <a href="{{ url_for('admin_resume_template', template_id=template.id, key=admin_key) }}" class="btn btn-outline-success">Resume</a>
+                                {% endif %}
+                                <a href="{{ url_for('admin_delete_template', template_id=template.id, key=admin_key) }}" class="btn btn-outline-danger" onclick="return confirm('Are you sure?')">Delete</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        {% if templates.pages > 1 %}
+        <nav aria-label="Templates pagination">
+            <ul class="pagination justify-content-center">
+                {% if templates.has_prev %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('admin_templates', page=templates.prev_num, key=admin_key, search=search) }}">Previous</a>
+                </li>
+                {% endif %}
+                
+                {% for page_num in templates.iter_pages() %}
+                    {% if page_num %}
+                        {% if page_num != templates.page %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('admin_templates', page=page_num, key=admin_key, search=search) }}">{{ page_num }}</a>
+                        </li>
+                        {% else %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                        {% endif %}
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if templates.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('admin_templates', page=templates.next_num, key=admin_key, search=search) }}">Next</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    {% else %}
+        <div class="text-center py-5">
+            <p class="text-muted">No templates found.</p>
+            <a href="{{ url_for('admin_upload_template', key=admin_key) }}" class="btn btn-primary">Upload First Template</a>
+        </div>
+    {% endif %}
+{% endblock %}

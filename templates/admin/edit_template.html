@@ -1,0 +1,261 @@
+{% extends 'base.html' %}
+{% block title %}Edit Template{% endblock %}
+{% block content %}
+    <h1 class="mb-4">Edit Template: {{ template.name }}</h1>
+    <form method="POST" class="card p-4">
+        <input type="hidden" name="key" value="{{ admin_key }}">
+        <h5>Document-Level Styling (Applies to ALL Text)</h5>
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label for="font_family" class="form-label">Document Font Family</label>
+                <select class="form-select" id="font_family" name="font_family" required>
+                    <!-- Common Fonts -->
+                    <option value="Times New Roman" {% if template.font_family == 'Times New Roman' %}selected{% endif %}>Times New Roman</option>
+                    <option value="Arial" {% if template.font_family == 'Arial' %}selected{% endif %}>Arial</option>
+                    <option value="Calibri" {% if template.font_family == 'Calibri' %}selected{% endif %}>Calibri</option>
+                    <option value="Verdana" {% if template.font_family == 'Verdana' %}selected{% endif %}>Verdana</option>
+                    <option value="Helvetica" {% if template.font_family == 'Helvetica' %}selected{% endif %}>Helvetica</option>
+                    <option value="Georgia" {% if template.font_family == 'Georgia' %}selected{% endif %}>Georgia</option>
+                    <option value="Palatino" {% if template.font_family == 'Palatino' %}selected{% endif %}>Palatino</option>
+                    <option value="Garamond" {% if template.font_family == 'Garamond' %}selected{% endif %}>Garamond</option>
+                    <option value="Bookman" {% if template.font_family == 'Bookman' %}selected{% endif %}>Bookman</option>
+                    <option value="Tahoma" {% if template.font_family == 'Tahoma' %}selected{% endif %}>Tahoma</option>
+                    <option value="Trebuchet MS" {% if template.font_family == 'Trebuchet MS' %}selected{% endif %}>Trebuchet MS</option>
+                    <option value="Comic Sans MS" {% if template.font_family == 'Comic Sans MS' %}selected{% endif %}>Comic Sans MS</option>
+                    <option value="Impact" {% if template.font_family == 'Impact' %}selected{% endif %}>Impact</option>
+                    <option value="Lucida Console" {% if template.font_family == 'Lucida Console' %}selected{% endif %}>Lucida Console</option>
+                    <option value="Courier New" {% if template.font_family == 'Courier New' %}selected{% endif %}>Courier New</option>
+                    <!-- Microsoft Office Fonts -->
+                    <option value="Cambria" {% if template.font_family == 'Cambria' %}selected{% endif %}>Cambria</option>
+                    <option value="Candara" {% if template.font_family == 'Candara' %}selected{% endif %}>Candara</option>
+                    <option value="Consolas" {% if template.font_family == 'Consolas' %}selected{% endif %}>Consolas</option>
+                    <option value="Constantia" {% if template.font_family == 'Constantia' %}selected{% endif %}>Constantia</option>
+                    <option value="Corbel" {% if template.font_family == 'Corbel' %}selected{% endif %}>Corbel</option>
+                    <!-- Google Fonts -->
+                    <option value="Open Sans" {% if template.font_family == 'Open Sans' %}selected{% endif %}>Open Sans</option>
+                    <option value="Roboto" {% if template.font_family == 'Roboto' %}selected{% endif %}>Roboto</option>
+                    <option value="Lato" {% if template.font_family == 'Lato' %}selected{% endif %}>Lato</option>
+                    <option value="Montserrat" {% if template.font_family == 'Montserrat' %}selected{% endif %}>Montserrat</option>
+                    <option value="Source Sans Pro" {% if template.font_family == 'Source Sans Pro' %}selected{% endif %}>Source Sans Pro</option>
+                    <option value="Oswald" {% if template.font_family == 'Oswald' %}selected{% endif %}>Oswald</option>
+                    <option value="Raleway" {% if template.font_family == 'Raleway' %}selected{% endif %}>Raleway</option>
+                    <option value="PT Sans" {% if template.font_family == 'PT Sans' %}selected{% endif %}>PT Sans</option>
+                    <option value="Ubuntu" {% if template.font_family == 'Ubuntu' %}selected{% endif %}>Ubuntu</option>
+                    <option value="Nunito" {% if template.font_family == 'Nunito' %}selected{% endif %}>Nunito</option>
+                    <!-- More Professional Fonts -->
+                    <option value="Minion Pro" {% if template.font_family == 'Minion Pro' %}selected{% endif %}>Minion Pro</option>
+                    <option value="Myriad Pro" {% if template.font_family == 'Myriad Pro' %}selected{% endif %}>Myriad Pro</option>
+                    <option value="Avenir" {% if template.font_family == 'Avenir' %}selected{% endif %}>Avenir</option>
+                    <option value="Futura" {% if template.font_family == 'Futura' %}selected{% endif %}>Futura</option>
+                    <option value="Gill Sans" {% if template.font_family == 'Gill Sans' %}selected{% endif %}>Gill Sans</option>
+                    <option value="Optima" {% if template.font_family == 'Optima' %}selected{% endif %}>Optima</option>
+                    <option value="Frutiger" {% if template.font_family == 'Frutiger' %}selected{% endif %}>Frutiger</option>
+                    <option value="Univers" {% if template.font_family == 'Univers' %}selected{% endif %}>Univers</option>
+                    <!-- Academic Fonts -->
+                    <option value="Computer Modern" {% if template.font_family == 'Computer Modern' %}selected{% endif %}>Computer Modern</option>
+                    <option value="Latin Modern" {% if template.font_family == 'Latin Modern' %}selected{% endif %}>Latin Modern</option>
+                    <option value="TeX Gyre Termes" {% if template.font_family == 'TeX Gyre Termes' %}selected{% endif %}>TeX Gyre Termes</option>
+                    <!-- And many more... -->
+                    <option value="Franklin Gothic" {% if template.font_family == 'Franklin Gothic' %}selected{% endif %}>Franklin Gothic</option>
+                    <option value="Century Gothic" {% if template.font_family == 'Century Gothic' %}selected{% endif %}>Century Gothic</option>
+                    <option value="Book Antiqua" {% if template.font_family == 'Book Antiqua' %}selected{% endif %}>Book Antiqua</option>
+                    <option value="Lucida Grande" {% if template.font_family == 'Lucida Grande' %}selected{% endif %}>Lucida Grande</option>
+                    <option value="Bell MT" {% if template.font_family == 'Bell MT' %}selected{% endif %}>Bell MT</option>
+                    <option value="Baskerville" {% if template.font_family == 'Baskerville' %}selected{% endif %}>Baskerville</option>
+                    <option value="Bodoni" {% if template.font_family == 'Bodoni' %}selected{% endif %}>Bodoni</option>
+                    <option value="Caslon" {% if template.font_family == 'Caslon' %}selected{% endif %}>Caslon</option>
+                    <option value="Didot" {% if template.font_family == 'Didot' %}selected{% endif %}>Didot</option>
+                    <!-- Additional Professional Fonts -->
+                    <option value="Adobe Garamond Pro" {% if template.font_family == 'Adobe Garamond Pro' %}selected{% endif %}>Adobe Garamond Pro</option>
+                    <option value="Adobe Caslon Pro" {% if template.font_family == 'Adobe Caslon Pro' %}selected{% endif %}>Adobe Caslon Pro</option>
+                    <option value="Proxima Nova" {% if template.font_family == 'Proxima Nova' %}selected{% endif %}>Proxima Nova</option>
+                    <option value="Brandon Grotesque" {% if template.font_family == 'Brandon Grotesque' %}selected{% endif %}>Brandon Grotesque</option>
+                    <option value="Gotham" {% if template.font_family == 'Gotham' %}selected{% endif %}>Gotham</option>
+                    <option value="Neutra" {% if template.font_family == 'Neutra' %}selected{% endif %}>Neutra</option>
+                    <option value="DIN" {% if template.font_family == 'DIN' %}selected{% endif %}>DIN</option>
+                    <option value="Trade Gothic" {% if template.font_family == 'Trade Gothic' %}selected{% endif %}>Trade Gothic</option>
+                    <option value="ITC Johnston" {% if template.font_family == 'ITC Johnston' %}selected{% endif %}>ITC Johnston</option>
+                    <option value="Source Serif Pro" {% if template.font_family == 'Source Serif Pro' %}selected{% endif %}>Source Serif Pro</option>
+                    <option value="IBM Plex Sans" {% if template.font_family == 'IBM Plex Sans' %}selected{% endif %}>IBM Plex Sans</option>
+                    <option value="IBM Plex Serif" {% if template.font_family == 'IBM Plex Serif' %}selected{% endif %}>IBM Plex Serif</option>
+                    <option value="Work Sans" {% if template.font_family == 'Work Sans' %}selected{% endif %}>Work Sans</option>
+                    <option value="Fira Sans" {% if template.font_family == 'Fira Sans' %}selected{% endif %}>Fira Sans</option>
+                    <option value="Merriweather" {% if template.font_family == 'Merriweather' %}selected{% endif %}>Merriweather</option>
+                    <option value="Playfair Display" {% if template.font_family == 'Playfair Display' %}selected{% endif %}>Playfair Display</option>
+                    <option value="Crimson Text" {% if template.font_family == 'Crimson Text' %}selected{% endif %}>Crimson Text</option>
+                    <option value="EB Garamond" {% if template.font_family == 'EB Garamond' %}selected{% endif %}>EB Garamond</option>
+                    <option value="Libre Baskerville" {% if template.font_family == 'Libre Baskerville' %}selected{% endif %}>Libre Baskerville</option>
+                    <option value="Old Standard TT" {% if template.font_family == 'Old Standard TT' %}selected{% endif %}>Old Standard TT</option>
+                    <!-- Microsoft Fonts -->
+                    <option value="Segoe UI" {% if template.font_family == 'Segoe UI' %}selected{% endif %}>Segoe UI</option>
+                    <option value="Segoe UI Light" {% if template.font_family == 'Segoe UI Light' %}selected{% endif %}>Segoe UI Light</option>
+                    <option value="Segoe UI Semibold" {% if template.font_family == 'Segoe UI Semibold' %}selected{% endif %}>Segoe UI Semibold</option>
+                    <option value="Segoe UI Black" {% if template.font_family == 'Segoe UI Black' %}selected{% endif %}>Segoe UI Black</option>
+                    <option value="Microsoft Sans Serif" {% if template.font_family == 'Microsoft Sans Serif' %}selected{% endif %}>Microsoft Sans Serif</option>
+                    <option value="Microsoft YaHei" {% if template.font_family == 'Microsoft YaHei' %}selected{% endif %}>Microsoft YaHei</option>
+                    <option value="Malgun Gothic" {% if template.font_family == 'Malgun Gothic' %}selected{% endif %}>Malgun Gothic</option>
+                    <option value="Yu Gothic" {% if template.font_family == 'Yu Gothic' %}selected{% endif %}>Yu Gothic</option>
+                    <!-- Apple Fonts -->
+                    <option value="San Francisco" {% if template.font_family == 'San Francisco' %}selected{% endif %}>San Francisco</option>
+                    <option value="Helvetica Neue" {% if template.font_family == 'Helvetica Neue' %}selected{% endif %}>Helvetica Neue</option>
+                    <option value="Apple Chancery" {% if template.font_family == 'Apple Chancery' %}selected{% endif %}>Apple Chancery</option>
+                    <option value="Chalkduster" {% if template.font_family == 'Chalkduster' %}selected{% endif %}>Chalkduster</option>
+                    <option value="Marker Felt" {% if template.font_family == 'Marker Felt' %}selected{% endif %}>Marker Felt</option>
+                    <!-- Professional Business Fonts -->
+                    <option value="Century" {% if template.font_family == 'Century' %}selected{% endif %}>Century</option>
+                    <option value="Century Schoolbook" {% if template.font_family == 'Century Schoolbook' %}selected{% endif %}>Century Schoolbook</option>
+                    <option value="Cooper Black" {% if template.font_family == 'Cooper Black' %}selected{% endif %}>Cooper Black</option>
+                    <option value="Copperplate" {% if template.font_family == 'Copperplate' %}selected{% endif %}>Copperplate</option>
+                    <option value="Rockwell" {% if template.font_family == 'Rockwell' %}selected{% endif %}>Rockwell</option>
+                    <option value="Trajan" {% if template.font_family == 'Trajan' %}selected{% endif %}>Trajan</option>
+                    <option value="Optima" {% if template.font_family == 'Optima' %}selected{% endif %}>Optima</option>
+                    <option value="Stone Sans" {% if template.font_family == 'Stone Sans' %}selected{% endif %}>Stone Sans</option>
+                    <option value="Stone Serif" {% if template.font_family == 'Stone Serif' %}selected{% endif %}>Stone Serif</option>
+                    <!-- Academic and Scientific -->
+                    <option value="Computer Modern Roman" {% if template.font_family == 'Computer Modern Roman' %}selected{% endif %}>Computer Modern Roman</option>
+                    <option value="Computer Modern Sans" {% if template.font_family == 'Computer Modern Sans' %}selected{% endif %}>Computer Modern Sans</option>
+                    <option value="Computer Modern Typewriter" {% if template.font_family == 'Computer Modern Typewriter' %}selected{% endif %}>Computer Modern Typewriter</option>
+                    <option value="STIX" {% if template.font_family == 'STIX' %}selected{% endif %}>STIX</option>
+                    <option value="XITS" {% if template.font_family == 'XITS' %}selected{% endif %}>XITS</option>
+                    <option value="DejaVu Sans" {% if template.font_family == 'DejaVu Sans' %}selected{% endif %}>DejaVu Sans</option>
+                    <option value="DejaVu Serif" {% if template.font_family == 'DejaVu Serif' %}selected{% endif %}>DejaVu Serif</option>
+                    <option value="Liberation Sans" {% if template.font_family == 'Liberation Sans' %}selected{% endif %}>Liberation Sans</option>
+                    <option value="Liberation Serif" {% if template.font_family == 'Liberation Serif' %}selected{% endif %}>Liberation Serif</option>
+                    <!-- Total: 100+ fonts! -->
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label for="font_size" class="form-label">Document Font Size</label>
+                <input type="number" class="form-control" id="font_size" name="font_size" value="{{ template.font_size }}" min="8" max="72" required>
+            </div>
+        </div>
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <label for="margin_top" class="form-label">Margin Top (inches)</label>
+                <input type="number" class="form-control" id="margin_top" name="margin_top" value="{{ template.margin_top }}" step="0.1" required>
+            </div>
+            <div class="col-md-3">
+                <label for="margin_bottom" class="form-label">Margin Bottom (inches)</label>
+                <input type="number" class="form-control" id="margin_bottom" name="margin_bottom" value="{{ template.margin_bottom }}" step="0.1" required>
+            </div>
+            <div class="col-md-3">
+                <label for="margin_left" class="form-label">Margin Left (inches)</label>
+                <input type="number" class="form-control" id="margin_left" name="margin_left" value="{{ template.margin_left }}" step="0.1" required>
+            </div>
+            <div class="col-md-3">
+                <label for="margin_right" class="form-label">Margin Right (inches)</label>
+                <input type="number" class="form-control" id="margin_right" name="margin_right" value="{{ template.margin_right }}" step="0.1" required>
+            </div>
+        </div>
+        <div class="mb-3">
+            <label for="default_line_spacing" class="form-label">Default Line Spacing</label>
+            <input type="number" class="form-control" id="default_line_spacing" name="default_line_spacing" value="{{ template.default_line_spacing }}" step="0.1" required>
+        </div>
+        <div class="mb-3">
+            <label for="name" class="form-label">Template Name</label>
+            <input type="text" class="form-control" id="name" name="name" value="{{ template.name }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="type" class="form-label">Type</label>
+            <input type="text" class="form-control" id="type" name="type" value="{{ template.type }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="description" class="form-label">Description</label>
+            <textarea class="form-control" id="description" name="description" rows="3">{{ template.description }}</textarea>
+        </div>
+        <h5>Individual Placeholder Instances (Each {{ name }} instance can be styled separately)</h5>
+        {% for placeholder in placeholders %}
+        <div class="card mb-2" style="border-left: 4px solid #1a73e8;">
+            <div class="card-body p-3">
+                <div class="row align-items-center">
+                    <div class="col-md-3">
+                        <strong>{{ placeholder.display_name }}</strong>
+                        <small class="text-muted d-block">{{ placeholder.name }}</small>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Type</label>
+                        <select class="form-select form-select-sm" name="{{ placeholder.id }}_type" onchange="toggleOptions(this, '{{ placeholder.id }}')">
+                            <option value="text" {% if placeholder.placeholder_type == 'text' %}selected{% endif %}>Text</option>
+                            <option value="date" {% if placeholder.placeholder_type == 'date' %}selected{% endif %}>Date</option>
+                            <option value="option" {% if placeholder.placeholder_type == 'option' %}selected{% endif %}>Option</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Text Style</label>
+                        <div class="btn-group btn-group-sm d-flex" role="group">
+                            <input type="checkbox" class="btn-check" id="{{ placeholder.id }}_bold" name="{{ placeholder.id }}_bold" {% if placeholder.bold %}checked{% endif %}>
+                            <label class="btn btn-outline-primary" for="{{ placeholder.id }}_bold"><strong>B</strong></label>
+                            
+                            <input type="checkbox" class="btn-check" id="{{ placeholder.id }}_italic" name="{{ placeholder.id }}_italic" {% if placeholder.italic %}checked{% endif %}>
+                            <label class="btn btn-outline-primary" for="{{ placeholder.id }}_italic"><em>I</em></label>
+                            
+                            <input type="checkbox" class="btn-check" id="{{ placeholder.id }}_underline" name="{{ placeholder.id }}_underline" {% if placeholder.underline %}checked{% endif %}>
+                            <label class="btn btn-outline-primary" for="{{ placeholder.id }}_underline"><u>U</u></label>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">Custom Placeholder Text</label>
+                        <input type="text" class="form-control form-control-sm" name="{{ placeholder.id }}_placeholder" value="{{ placeholder.default_value or '' }}" placeholder="e.g., Joe Doe">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Casing</label>
+                        <select class="form-select form-select-sm" name="{{ placeholder.id }}_casing">
+                            <option value="none" {% if placeholder.casing == 'none' %}selected{% endif %}>Normal</option>
+                            <option value="upper" {% if placeholder.casing == 'upper' %}selected{% endif %}>UPPER</option>
+                            <option value="lower" {% if placeholder.casing == 'lower' %}selected{% endif %}>lower</option>
+                            <option value="title" {% if placeholder.casing == 'title' %}selected{% endif %}>Title</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="row mt-2">
+                    <div class="col-md-12">
+                        <label class="form-label small">Help Text</label>
+                        <input type="text" class="form-control form-control-sm" name="{{ placeholder.id }}_help" value="{{ placeholder.help_text or '' }}" placeholder="Instructions for this field...">
+                    </div>
+                </div>
+                
+                <div id="{{ placeholder.id }}_options_section" class="mt-2" style="display: {{ 'block' if placeholder.placeholder_type == 'option' else 'none' }};">
+                    <label class="form-label small">Options</label>
+                    <div id="{{ placeholder.id }}_options_container">
+                        {% for option in json.loads(placeholder.options or '[]') %}
+                        <div class="input-group input-group-sm mb-1">
+                            <input type="text" class="form-control" name="{{ placeholder.id }}_options" value="{{ option }}">
+                            <button type="button" class="btn btn-outline-danger btn-sm" onclick="this.parentElement.remove()">×</button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button type="button" class="btn btn-success btn-sm" onclick="addOptionField('{{ placeholder.id }}')">+ Add Option</button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        <div class="text-center">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ url_for('admin_templates', key=admin_key) }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+    <script>
+        function toggleOptions(select, id) {
+            const section = document.getElementById(id + '_options_section');
+            section.style.display = select.value === 'option' ? 'block' : 'none';
+        }
+        function addOptionField(id) {
+            const container = document.getElementById(id + '_options_container');
+            const group = document.createElement('div');
+            group.className = 'input-group mb-2';
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'form-control';
+            input.name = id + '_options';
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn btn-danger';
+            button.textContent = 'Remove';
+            button.onclick = function() { this.parentElement.remove(); };
+            group.appendChild(input);
+            group.appendChild(button);
+            container.appendChild(group);
+        }
+    </script>
+{% endblock %}

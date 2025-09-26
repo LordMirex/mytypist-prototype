@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<div class="hero text-center">
+    <h1>Welcome to MyTypist</h1>
+    <p class="lead">Create professional documents with ease using our customizable templates.</p>
+</div>
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <h3>Select Template Type</h3>
+        <form method="GET" action="{{ url_for('index') }}">
+            <div class="mb-3">
+                <select name="type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for type in types %}
+                    <option value="{{ type }}">{{ type }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Filter Templates</button>
+        </form>
+    </div>
+    <div class="col-md-8">
+        <h3>Available Templates</h3>
+        {% if templates %}
+        <div class="row">
+            {% for template in templates %}
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ template.name }}</h5>
+                        <p class="card-text"><strong>Type:</strong> {{ template.type }}</p>
+                        <p class="card-text">{{ template.description or 'No description available' }}</p>
+                        <a href="{{ url_for('create', template_id=template.id) }}" class="btn btn-primary">Use Template</a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p>No templates available. Please contact the administrator.</p>
+        {% endif %}
+    </div>
+</div>
+<h3>Recent Documents</h3>
+{% if recent_docs.items %}
+<div class="row">
+    {% for doc in recent_docs.items %}
+    <div class="col-md-4 mb-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title">{{ doc.original_filename }}</h6>
+                <p class="card-text"><small class="text-muted">{{ doc.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</small></p>
+                <a href="{{ url_for('download', document_id=doc.id, format='docx') }}" class="btn btn-sm btn-outline-primary">DOCX</a>
+                <a href="{{ url_for('download', document_id=doc.id, format='pdf') }}" class="btn btn-sm btn-outline-primary">PDF</a>
+                <a href="{{ url_for('delete_document', document_id=doc.id) }}" class="btn btn-sm btn-outline-danger">Delete</a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p>No recent documents.</p>
+{% endif %}
+{% if recent_docs.has_prev or recent_docs.has_next %}
+<nav aria-label="Page navigation">
+    <ul class="pagination justify-content-center">
+        {% if recent_docs.has_prev %}
+        <li class="page-item"><a class="page-link" href="{{ url_for('index', page=recent_docs.prev_num) }}">Previous</a></li>
+        {% endif %}
+        {% for p in recent_docs.iter_pages() %}
+        <li class="page-item {% if p == recent_docs.page %}active{% endif %}">
+            <a class="page-link" href="{{ url_for('index', page=p) }}">{{ p }}</a>
+        </li>
+        {% endfor %}
+        {% if recent_docs.has_next %}
+        <li class="page-item"><a class="page-link" href="{{ url_for('index', page=recent_docs.next_num) }}">Next</a></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

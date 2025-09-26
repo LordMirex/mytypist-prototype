@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block title %}Batch Document Generator{% endblock %}
+{% block content %}
+    <h1 class="mb-4">Batch Document Generator</h1>
+    <p>Select multiple templates to generate all documents with one form submission.</p>
+    <form method="POST" action="/batch" class="card p-4" id="batchForm">
+        <div class="mb-3">
+            <h5>Select Templates</h5>
+            <label>Filter by Type:</label>
+            <select id="typeFilter" class="form-select mb-2">
+                <option>All Types</option>
+                {% for type in types %}
+                    <option>{{ type|capitalize }}</option>
+                {% endfor %}
+            </select>
+            <div id="templateList" class="list-group">
+                {% for template in templates %}
+                    <div class="list-group-item" data-type="{{ template.type }}">
+                        <input type="checkbox" name="template_checkbox" value="{{ template.id }}">
+                        {{ template.name }} ({{ template.type|capitalize }})
+                    </div>
+                {% endfor %}
+            </div>
+            <p id="selectedCount">0 template(s) selected</p>
+            <input type="hidden" name="template_ids" id="templateIds">
+        </div>
+        <div id="formFields" class="mb-3" style="display: none;">
+            <h5>Fill Details</h5>
+            <!-- Dynamic form fields will be loaded here via JS -->
+        </div>
+        <div class="d-flex justify-content-between">
+            <a href="/" class="btn btn-secondary">Back</a>
+        </div>
+        <div id="loadingIndicator" style="display: none;" class="text-center mt-3">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Processing batch... Please wait.</p>
+        </div>
+    </form>
+
+    <script>
+        const checkboxes = document.querySelectorAll('input[name="template_checkbox"]');
+        const selectedCount = document.getElementById('selectedCount');
+        const templateIds = document.getElementById('templateIds');
+        const formFields = document.getElementById('formFields');
+        const typeFilter = document.getElementById('typeFilter');
+
+        function updateSelected() {
+            const selected = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+            selectedCount.textContent = `${selected.length} template(s) selected`;
+            templateIds.value = JSON.stringify(selected);
+            if (selected.length > 0) {
+                formFields.style.display = 'block';
+                fetch('/get_merged_placeholders', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({template_ids: selected})
+                }).then(response => response.text()).then(html => {
+                    formFields.innerHTML = html;
+                }).catch(error => console.error('Error:', error));
+            } else {
+                formFields.style.display = 'none';
+            }
+        }
+
+        checkboxes.forEach(cb => cb.addEventListener('change', updateSelected));
+
+        typeFilter.addEventListener('change', function() {
+            const type = this.value.toLowerCase();
+            document.querySelectorAll('#templateList .list-group-item').forEach(item => {
+                if (type === 'all types' || item.dataset.type === type) {
+                    item.style.display = 'block';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        });
+
+        // Show loading indicator on form submission
+        document.getElementById('batchForm').addEventListener('submit', function() {
+            document.getElementById('generateBtn').disabled = true;
+            document.getElementById('loadingIndicator').style.display = 'block';
+        });
+    </script>
+{% endblock %}

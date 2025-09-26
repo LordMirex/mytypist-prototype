@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% block title %}Admin Portal{% endblock %}
+{% block content %}
+<div class="hero text-center">
+    <h1>Admin Portal</h1>
+    <p class="lead">Manage templates and view system statistics.</p>
+</div>
+<div class="row">
+    <div class="col-md-3 mb-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Total Templates</h5>
+                <p class="card-text display-6">{{ stats.templates }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Active Templates</h5>
+                <p class="card-text display-6">{{ stats.active_templates }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Total Documents</h5>
+                <p class="card-text display-6">{{ stats.total_documents }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Total Batches</h5>
+                <p class="card-text display-6">{{ stats.total_batches }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="text-center mb-4">
+    <a href="{{ url_for('admin_templates', key=admin_key) }}" class="btn btn-primary btn-lg">Manage Templates</a>
+    <a href="{{ url_for('admin_upload_template', key=admin_key) }}" class="btn btn-primary btn-lg">Upload New Template</a>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Database Management</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <h6>Backup Database</h6>
+                <p class="text-muted">Create a backup of your database before making changes</p>
+                <a href="{{ url_for('admin_backup_database', key=admin_key) }}" class="btn btn-success">
+                    <i class="fas fa-download"></i> Create Backup
+                </a>
+            </div>
+            <div class="col-md-6">
+                <h6>Clear All Data</h6>
+                <p class="text-muted text-danger">⚠️ WARNING: This will delete ALL templates, documents, and files!</p>
+                <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#clearDatabaseModal">
+                    <i class="fas fa-trash"></i> Clear Database
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Clear Database Confirmation Modal -->
+<div class="modal fade" id="clearDatabaseModal" tabindex="-1" aria-labelledby="clearDatabaseModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="clearDatabaseModalLabel">⚠️ Clear Database</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-danger"><strong>WARNING: This action cannot be undone!</strong></p>
+                <p>This will permanently delete:</p>
+                <ul>
+                    <li>All templates and their configurations</li>
+                    <li>All generated documents</li>
+                    <li>All uploaded template files</li>
+                    <li>All batch processing records</li>
+                </ul>
+                <p>Are you absolutely sure you want to continue?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <a href="{{ url_for('admin_clear_database', key=admin_key) }}" class="btn btn-danger">
+                    Yes, Clear Everything
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
