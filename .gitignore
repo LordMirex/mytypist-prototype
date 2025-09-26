@@ -15,12 +15,12 @@ venv/
 *.swp
 
 # Project-specific folders
-# uploads/
+uploads/
 temp/
 generated/
-# db/
-# *.db
-# *.sqlite3
+db/
+*.db
+*.sqlite3
 
 # Logs
 *.log
@@ -28,7 +28,7 @@ generated/
 # Distribution / packaging
 *.egg
 *.egg-info/
-dist/
+dist/s
 build/
 .eggs/
 
@@ -42,3 +42,4 @@ htmlcov/
 Thumbs.db
 .qodo/
 .claude/
+s
