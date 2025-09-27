@@ -1513,15 +1513,13 @@ def internal_error(error):
 
 
 
-# ... (rest of the admin routes remain the same as in your original file)
-
 # Initialize Database
 with app.app_context():
     db.create_all()
 
 if __name__ == '__main__':
     try:
-        port = int(os.environ.get('PORT', 8000))
+        port = int(os.environ.get('PORT', 8080))
     except (ValueError, TypeError):
         port = 8000
     
