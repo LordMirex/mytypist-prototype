@@ -5,8 +5,15 @@ from docxtpl import DocxTemplate, RichText
 from werkzeug.utils import secure_filename
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from docx import Document
 from docx.shared import Inches, Pt
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
+from reportlab.lib.units import inch
+from xml.sax.saxutils import escape
 from collections import defaultdict, Counter
 import os
 import re
@@ -19,7 +26,6 @@ import logging
 import json
 import xml.etree.ElementTree as ET
 from zipfile import ZipFile
-import img2pdf
 from PIL import Image, ImageDraw, ImageFont
 import tempfile
 
@@ -616,83 +622,201 @@ class DocumentProcessor:
 
     @staticmethod
     def convert_to_pdf(docx_path):
-        """Convert DOCX to PDF using image-based approach for perfect formatting."""
+        """Convert DOCX to PDF using simple canvas approach for reliable output."""
         try:
-            # Create a temporary directory for images
-            with tempfile.TemporaryDirectory() as temp_dir:
-                # Convert DOCX to images (simulate with a high-quality render)
-                # For now, we'll create a simple image representation
-                # In production, you might want to use a more sophisticated approach
+            pdf_path = docx_path.replace('.docx', '.pdf')
+            logger.info(f"Starting simple PDF conversion: {docx_path} -> {pdf_path}")
+            # Define font settings BEFORE using them
+            FIXED_FONT_SIZE = 13
+            BASE_FONT_NAME = 'Times-Roman'  # Cross-platform compatible font
+            
+            logger.info(f"Using HARDCODED font: {BASE_FONT_NAME} at size {FIXED_FONT_SIZE}")
+
+            # Open the DOCX
+            doc = Document(docx_path)
+            section = doc.sections[0]
+
+            # Get page dimensions
+            try:
+                page_width = float(section.page_width)
+                page_height = float(section.page_height)
+                left_margin = float(section.left_margin)
+                right_margin = float(section.right_margin)
+                top_margin = float(section.top_margin)
+                bottom_margin = float(section.bottom_margin)
+            except Exception:
+                page_width, page_height = letter
+                left_margin = right_margin = top_margin = bottom_margin = 72
+
+            # Create PDF using simple canvas approach
+            c = canvas.Canvas(pdf_path, pagesize=(page_width, page_height))
+            
+            # CROSS-PLATFORM BOOKMAN OLD STYLE SOLUTION
+            def register_bookman_fonts():
+                """Register Bookman Old Style fonts from bundled files or fallback to system/Times-Roman."""
+                fonts_dir = os.path.join(BASE_DIR, 'fonts')
                 
-                # Read the DOCX content
-                doc = Document(docx_path)
+                # Font file mappings
+                font_files = {
+                    'BookmanOldStyle': 'BookmanOldStyle-Regular.ttf',
+                    'BookmanOldStyle-Bold': 'BookmanOldStyle-Bold.ttf',
+                    'BookmanOldStyle-Italic': 'BookmanOldStyle-Italic.ttf',
+                    'BookmanOldStyle-BoldItalic': 'BookmanOldStyle-BoldItalic.ttf'
+                }
                 
-                # Create a high-quality image representation
-                images = []
+                registered_fonts = []
                 
-                # For each "page" (simplified - in reality, you'd need proper pagination)
-                # This is a simplified approach that creates one image per section
-                for i, section in enumerate(doc.sections):
-                    # Create an image with the content
-                    img_width = int(section.page_width.pt)
-                    img_height = int(section.page_height.pt)
+                # Try to register bundled fonts first
+                for font_name, font_file in font_files.items():
+                    font_path = os.path.join(fonts_dir, font_file)
+                    if os.path.exists(font_path):
+                        try:
+                            pdfmetrics.registerFont(TTFont(font_name, font_path))
+                            registered_fonts.append(font_name)
+                            logger.info(f"Registered bundled font: {font_name} from {font_file}")
+                        except Exception as e:
+                            logger.warning(f"Failed to register {font_name}: {e}")
+                
+                # If no bundled fonts, try system fonts (Windows/Mac)
+                if not registered_fonts:
+                    system_paths = [
+                        # Windows paths
+                        r'C:\Windows\Fonts\BOOKOS.TTF',
+                        r'C:\Windows\Fonts\bookos.ttf',
+                        # Mac paths  
+                        '/System/Library/Fonts/BookmanOldStyle.ttf',
+                        '/Library/Fonts/BookmanOldStyle.ttf'
+                    ]
                     
-                    # Create a high-resolution image (300 DPI for print quality)
-                    dpi = 300
-                    img_width_px = int(img_width * dpi / 72)
-                    img_height_px = int(img_height * dpi / 72)
-                    
-                    image = Image.new('RGB', (img_width_px, img_height_px), 'white')
-                    draw = ImageDraw.Draw(image)
-                    
-                    # Simple text rendering (in production, use proper layout engine)
-                    y_position = 100  # Start position
-                    
-                    for paragraph in doc.paragraphs:
-                        if paragraph.text.strip():
-                            # Use a basic font
+                    for path in system_paths:
+                        if os.path.exists(path):
                             try:
-                                font = ImageFont.truetype("arial.ttf", 40)
-                            except:
-                                font = ImageFont.load_default()
-                            
-                            # Draw the paragraph text
-                            draw.text((100, y_position), paragraph.text, fill='black', font=font)
-                            y_position += 60
+                                pdfmetrics.registerFont(TTFont('BookmanOldStyle', path))
+                                registered_fonts.append('BookmanOldStyle')
+                                logger.info(f"Registered system font: BookmanOldStyle from {path}")
+                                break
+                            except Exception as e:
+                                logger.warning(f"Failed to register system font {path}: {e}")
+                
+                # Return the base font name to use
+                if 'BookmanOldStyle' in registered_fonts:
+                    return 'BookmanOldStyle'
+                else:
+                    logger.info("Bookman Old Style not available, using Times-Roman fallback")
+                    return 'Times-Roman'
+            
+            # Register fonts and get the base font name
+            BASE_FONT_NAME = register_bookman_fonts()
+
+            # Start drawing from top
+            y_position = page_height - top_margin
+            
+            for paragraph in doc.paragraphs:
+                if not paragraph.text.strip():
+                    y_position -= FIXED_FONT_SIZE * 1.8  # Empty line spacing consistent with text
+                    continue
                     
-                    # Save the image
-                    img_path = os.path.join(temp_dir, f"page_{i+1}.png")
-                    image.save(img_path, 'PNG', dpi=(dpi, dpi))
-                    images.append(img_path)
+                # Get paragraph alignment
+                alignment = paragraph.alignment
                 
-                # Convert images to PDF
-                pdf_path = docx_path.replace('.docx', '.pdf')
+                # Process each run in the paragraph
+                x_position = left_margin
+                line_parts = []
                 
-                with open(pdf_path, "wb") as f:
-                    if images:
-                        f.write(img2pdf.convert(images))
-                    else:
-                        # Fallback: create a simple PDF if no images
-                        c = canvas.Canvas(pdf_path, pagesize=letter)
-                        c.drawString(100, 750, "Document converted to PDF")
-                        c.save()
+                for run in paragraph.runs:
+                    if not run.text:
+                        continue
+                        
+                    # Get run formatting - HARDCODED to Bookman Old Style and size 13
+                    font_name = BASE_FONT_NAME  # Always 'BookmanOldStyle' or 'Times-Roman' fallback
+                    font_size = FIXED_FONT_SIZE  # Always 13
+                    
+                    # Build font string with styling - handle Bookman vs Times-Roman
+                    if font_name == 'BookmanOldStyle':
+                        if run.bold and run.italic:
+                            font_string = "BookmanOldStyle-BoldItalic"
+                        elif run.bold:
+                            font_string = "BookmanOldStyle-Bold"
+                        elif run.italic:
+                            font_string = "BookmanOldStyle-Italic"
+                        else:
+                            font_string = "BookmanOldStyle"
+                    else:  # Times-Roman fallback
+                        if run.bold and run.italic:
+                            font_string = f"{font_name}-BoldOblique"
+                        elif run.bold:
+                            font_string = f"{font_name}-Bold"
+                        elif run.italic:
+                            font_string = f"{font_name}-Oblique"
+                        else:
+                            font_string = font_name
+                    
+                    line_parts.append({
+                        'text': run.text,
+                        'font': font_string,
+                        'size': font_size,
+                        'underline': run.underline
+                    })
                 
-                logger.info(f"Successfully converted DOCX to PDF using image-based method: {pdf_path}")
-                return pdf_path
-                
+                if line_parts:
+                    # Calculate total text width for alignment
+                    total_width = 0
+                    for part in line_parts:
+                        c.setFont(part['font'], part['size'])
+                        total_width += c.stringWidth(part['text'], part['font'], part['size'])
+                    
+                    # Determine x position based on alignment
+                    content_width = page_width - left_margin - right_margin
+                    if alignment == 1:  # CENTER
+                        x_position = left_margin + (content_width - total_width) / 2
+                    elif alignment == 2:  # RIGHT
+                        x_position = page_width - right_margin - total_width
+                    else:  # LEFT or default
+                        x_position = left_margin
+                    
+                    # Draw each part
+                    current_x = x_position
+                    for part in line_parts:
+                        c.setFont(part['font'], part['size'])
+                        c.drawString(current_x, y_position, part['text'])
+                        
+                        # Add underline if needed
+                        if part['underline']:
+                            text_width = c.stringWidth(part['text'], part['font'], part['size'])
+                            c.line(current_x, y_position - 2, current_x + text_width, y_position - 2)
+                        
+                        current_x += c.stringWidth(part['text'], part['font'], part['size'])
+                    
+                    # Move to next line - use proper line spacing
+                    y_position -= FIXED_FONT_SIZE * 1.8  # Increased spacing for readability
+                    
+                    # Add extra spacing after paragraphs (simulate paragraph breaks)
+                    if paragraph.text.strip().endswith('.') or paragraph.text.strip().endswith(':'):
+                        y_position -= FIXED_FONT_SIZE * 0.5  # Extra paragraph spacing
+                    
+                    # Check if we need a new page
+                    if y_position < bottom_margin:
+                        c.showPage()
+                        y_position = page_height - top_margin
+            
+            c.save()
+            logger.info(f"Simple PDF conversion completed: {pdf_path}")
+            return pdf_path
+            
         except Exception as e:
-            logger.error(f"Image-based PDF conversion failed: {str(e)}")
-            # Fallback to simple PDF creation
+            logger.error(f"Simple PDF conversion failed: {str(e)}")
             return DocumentProcessor._create_simple_pdf(docx_path)
 
     @staticmethod
     def _create_simple_pdf(docx_path):
-        """Create a simple PDF as fallback."""
+        """Create a simple PDF as a clear fallback indicating conversion error."""
         pdf_path = docx_path.replace('.docx', '.pdf')
         try:
             c = canvas.Canvas(pdf_path, pagesize=letter)
-            c.drawString(100, 750, "PDF Conversion")
-            c.drawString(100, 730, "Document converted successfully")
+            c.setFont("Times-Roman", 12)
+            c.drawString(72, 750, "PDF Conversion Error")
+            c.drawString(72, 730, "The system could not fully render the DOCX to PDF.")
+            c.drawString(72, 712, "Please download the DOCX instead, or contact support.")
             c.save()
             return pdf_path
         except Exception as e:
@@ -960,6 +1084,85 @@ def batch_download(batch_id):
     except Exception as e:
         logger.error(f"Error creating batch download: {str(e)}")
         flash('Error creating batch download. Please try downloading documents individually.', 'error')
+        return redirect(url_for('batch_results', batch_id=batch_id))
+
+@app.route('/batch_download_docx/<string:batch_id>')
+def batch_download_docx(batch_id):
+    """Download all DOCX documents from a batch as a ZIP file."""
+    batch = BatchGeneration.query.filter_by(batch_id=batch_id).first_or_404()
+    documents = CreatedDocument.query.filter_by(batch_id=batch_id).all()
+    
+    if not documents:
+        flash('No documents found in this batch.', 'error')
+        return redirect(url_for('batch_results', batch_id=batch_id))
+    
+    try:
+        # Create a ZIP file in memory with only DOCX files
+        zip_buffer = io.BytesIO()
+        with ZipFile(zip_buffer, 'w') as zip_file:
+            for doc in documents:
+                docx_path = os.path.join(app.config['GENERATED_FOLDER'], doc.file_path)
+                if os.path.exists(docx_path):
+                    # Add only DOCX file to ZIP
+                    zip_file.write(docx_path, doc.original_filename)
+        
+        zip_buffer.seek(0)
+        
+        # Send the ZIP file
+        zip_filename = f"batch_docx_{batch_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name=zip_filename,
+            mimetype='application/zip'
+        )
+        
+    except Exception as e:
+        logger.error(f"Error creating DOCX batch download: {str(e)}")
+        flash('Error creating DOCX batch download. Please try downloading documents individually.', 'error')
+        return redirect(url_for('batch_results', batch_id=batch_id))
+
+@app.route('/batch_download_pdf/<string:batch_id>')
+def batch_download_pdf(batch_id):
+    """Download all PDF documents from a batch as a ZIP file."""
+    batch = BatchGeneration.query.filter_by(batch_id=batch_id).first_or_404()
+    documents = CreatedDocument.query.filter_by(batch_id=batch_id).all()
+    
+    if not documents:
+        flash('No documents found in this batch.', 'error')
+        return redirect(url_for('batch_results', batch_id=batch_id))
+    
+    try:
+        # Create a ZIP file in memory with only PDF files
+        zip_buffer = io.BytesIO()
+        with ZipFile(zip_buffer, 'w') as zip_file:
+            for doc in documents:
+                docx_path = os.path.join(app.config['GENERATED_FOLDER'], doc.file_path)
+                pdf_path = docx_path.replace('.docx', '.pdf')
+                
+                # Generate PDF if it doesn't exist
+                if not os.path.exists(pdf_path) and os.path.exists(docx_path):
+                    DocumentProcessor.convert_to_pdf(docx_path)
+                
+                # Add PDF file to ZIP if it exists
+                if os.path.exists(pdf_path):
+                    pdf_filename = doc.original_filename.replace('.docx', '.pdf')
+                    zip_file.write(pdf_path, pdf_filename)
+        
+        zip_buffer.seek(0)
+        
+        # Send the ZIP file
+        zip_filename = f"batch_pdf_{batch_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name=zip_filename,
+            mimetype='application/zip'
+        )
+        
+    except Exception as e:
+        logger.error(f"Error creating PDF batch download: {str(e)}")
+        flash('Error creating PDF batch download. Please try downloading documents individually.', 'error')
         return redirect(url_for('batch_results', batch_id=batch_id))
 
 @app.route('/admin')
