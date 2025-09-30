@@ -651,154 +651,120 @@ class DocumentProcessor:
             # Create PDF using simple canvas approach
             c = canvas.Canvas(pdf_path, pagesize=(page_width, page_height))
             
-            # CROSS-PLATFORM BOOKMAN OLD STYLE SOLUTION
-            def register_bookman_fonts():
-                """Register Bookman Old Style fonts from bundled files or fallback to system/Times-Roman."""
-                fonts_dir = os.path.join(BASE_DIR, 'fonts')
-                
-                # Font file mappings
-                font_files = {
-                    'BookmanOldStyle': 'BookmanOldStyle-Regular.ttf',
-                    'BookmanOldStyle-Bold': 'BookmanOldStyle-Bold.ttf',
-                    'BookmanOldStyle-Italic': 'BookmanOldStyle-Italic.ttf',
-                    'BookmanOldStyle-BoldItalic': 'BookmanOldStyle-BoldItalic.ttf'
-                }
-                
-                registered_fonts = []
-                
-                # Try to register bundled fonts first
-                for font_name, font_file in font_files.items():
-                    font_path = os.path.join(fonts_dir, font_file)
-                    if os.path.exists(font_path):
-                        try:
-                            pdfmetrics.registerFont(TTFont(font_name, font_path))
-                            registered_fonts.append(font_name)
-                            logger.info(f"Registered bundled font: {font_name} from {font_file}")
-                        except Exception as e:
-                            logger.warning(f"Failed to register {font_name}: {e}")
-                
-                # If no bundled fonts, try system fonts (Windows/Mac)
-                if not registered_fonts:
-                    system_paths = [
-                        # Windows paths
-                        r'C:\Windows\Fonts\BOOKOS.TTF',
-                        r'C:\Windows\Fonts\bookos.ttf',
-                        # Mac paths  
-                        '/System/Library/Fonts/BookmanOldStyle.ttf',
-                        '/Library/Fonts/BookmanOldStyle.ttf'
-                    ]
-                    
-                    for path in system_paths:
-                        if os.path.exists(path):
-                            try:
-                                pdfmetrics.registerFont(TTFont('BookmanOldStyle', path))
-                                registered_fonts.append('BookmanOldStyle')
-                                logger.info(f"Registered system font: BookmanOldStyle from {path}")
-                                break
-                            except Exception as e:
-                                logger.warning(f"Failed to register system font {path}: {e}")
-                
-                # Return the base font name to use
-                if 'BookmanOldStyle' in registered_fonts:
-                    return 'BookmanOldStyle'
+
+            # Font fallback logic: always use built-in fonts if custom fonts are missing
+            def get_reportlab_font(run, base_font):
+                # Only use built-in ReportLab fonts if Bookman is not available
+                # Built-in: Times-Roman, Times-Bold, Times-Italic, Times-BoldItalic
+                if base_font == 'BookmanOldStyle':
+                    # Try to use Bookman if registered
+                    if run.bold and run.italic:
+                        return "BookmanOldStyle-BoldItalic"
+                    elif run.bold:
+                        return "BookmanOldStyle-Bold"
+                    elif run.italic:
+                        return "BookmanOldStyle-Italic"
+                    else:
+                        return "BookmanOldStyle"
                 else:
-                    logger.info("Bookman Old Style not available, using Times-Roman fallback")
-                    return 'Times-Roman'
-            
-            # Register fonts and get the base font name
-            BASE_FONT_NAME = register_bookman_fonts()
+                    # Always use built-in Times fonts
+                    if run.bold and run.italic:
+                        return "Times-BoldItalic"
+                    elif run.bold:
+                        return "Times-Bold"
+                    elif run.italic:
+                        return "Times-Italic"
+                    else:
+                        return "Times-Roman"
+
+            # Try to register Bookman fonts, but always fallback to Times-Roman
+            fonts_dir = os.path.join(BASE_DIR, 'fonts')
+            bookman_fonts = [
+                ('BookmanOldStyle', 'BookmanOldStyle-Regular.ttf'),
+                ('BookmanOldStyle-Bold', 'BookmanOldStyle-Bold.ttf'),
+                ('BookmanOldStyle-Italic', 'BookmanOldStyle-Italic.ttf'),
+                ('BookmanOldStyle-BoldItalic', 'BookmanOldStyle-BoldItalic.ttf'),
+            ]
+            bookman_available = True
+            for font_name, font_file in bookman_fonts:
+                font_path = os.path.join(fonts_dir, font_file)
+                if os.path.exists(font_path):
+                    try:
+                        pdfmetrics.registerFont(TTFont(font_name, font_path))
+                    except Exception as e:
+                        logger.warning(f"Failed to register {font_name}: {e}")
+                        bookman_available = False
+                else:
+                    bookman_available = False
+
+            # If any Bookman font is missing, fallback to built-in Times
+            base_font = 'BookmanOldStyle' if bookman_available else 'Times-Roman'
+            if not bookman_available:
+                logger.info("Bookman Old Style fonts not available, using built-in Times-Roman family for PDF output.")
 
             # Start drawing from top
             y_position = page_height - top_margin
-            
+
             for paragraph in doc.paragraphs:
                 if not paragraph.text.strip():
-                    y_position -= FIXED_FONT_SIZE * 1.8  # Empty line spacing consistent with text
+                    y_position -= FIXED_FONT_SIZE * 1.8
                     continue
-                    
-                # Get paragraph alignment
+
                 alignment = paragraph.alignment
-                
-                # Process each run in the paragraph
                 x_position = left_margin
                 line_parts = []
-                
+
                 for run in paragraph.runs:
                     if not run.text:
                         continue
-                        
-                    # Get run formatting - HARDCODED to Bookman Old Style and size 13
-                    font_name = BASE_FONT_NAME  # Always 'BookmanOldStyle' or 'Times-Roman' fallback
-                    font_size = FIXED_FONT_SIZE  # Always 13
-                    
-                    # Build font string with styling - handle Bookman vs Times-Roman
-                    if font_name == 'BookmanOldStyle':
-                        if run.bold and run.italic:
-                            font_string = "BookmanOldStyle-BoldItalic"
-                        elif run.bold:
-                            font_string = "BookmanOldStyle-Bold"
-                        elif run.italic:
-                            font_string = "BookmanOldStyle-Italic"
-                        else:
-                            font_string = "BookmanOldStyle"
-                    else:  # Times-Roman fallback
-                        if run.bold and run.italic:
-                            font_string = f"{font_name}-BoldOblique"
-                        elif run.bold:
-                            font_string = f"{font_name}-Bold"
-                        elif run.italic:
-                            font_string = f"{font_name}-Oblique"
-                        else:
-                            font_string = font_name
-                    
+                    font_string = get_reportlab_font(run, base_font)
+                    font_size = FIXED_FONT_SIZE
                     line_parts.append({
                         'text': run.text,
                         'font': font_string,
                         'size': font_size,
                         'underline': run.underline
                     })
-                
+
                 if line_parts:
-                    # Calculate total text width for alignment
                     total_width = 0
                     for part in line_parts:
-                        c.setFont(part['font'], part['size'])
-                        total_width += c.stringWidth(part['text'], part['font'], part['size'])
-                    
-                    # Determine x position based on alignment
+                        try:
+                            c.setFont(part['font'], part['size'])
+                            total_width += c.stringWidth(part['text'], part['font'], part['size'])
+                        except Exception as e:
+                            logger.warning(f"Font {part['font']} not available, using Times-Roman. Error: {e}")
+                            c.setFont('Times-Roman', part['size'])
+                            total_width += c.stringWidth(part['text'], 'Times-Roman', part['size'])
+
                     content_width = page_width - left_margin - right_margin
-                    if alignment == 1:  # CENTER
+                    if alignment == 1:
                         x_position = left_margin + (content_width - total_width) / 2
-                    elif alignment == 2:  # RIGHT
+                    elif alignment == 2:
                         x_position = page_width - right_margin - total_width
-                    else:  # LEFT or default
+                    else:
                         x_position = left_margin
-                    
-                    # Draw each part
+
                     current_x = x_position
                     for part in line_parts:
-                        c.setFont(part['font'], part['size'])
+                        try:
+                            c.setFont(part['font'], part['size'])
+                        except Exception as e:
+                            logger.warning(f"Font {part['font']} not available, using Times-Roman. Error: {e}")
+                            c.setFont('Times-Roman', part['size'])
                         c.drawString(current_x, y_position, part['text'])
-                        
-                        # Add underline if needed
                         if part['underline']:
                             text_width = c.stringWidth(part['text'], part['font'], part['size'])
                             c.line(current_x, y_position - 2, current_x + text_width, y_position - 2)
-                        
                         current_x += c.stringWidth(part['text'], part['font'], part['size'])
-                    
-                    # Move to next line - use proper line spacing
-                    y_position -= FIXED_FONT_SIZE * 1.8  # Increased spacing for readability
-                    
-                    # Add extra spacing after paragraphs (simulate paragraph breaks)
+
+                    y_position -= FIXED_FONT_SIZE * 1.8
                     if paragraph.text.strip().endswith('.') or paragraph.text.strip().endswith(':'):
-                        y_position -= FIXED_FONT_SIZE * 0.5  # Extra paragraph spacing
-                    
-                    # Check if we need a new page
+                        y_position -= FIXED_FONT_SIZE * 0.5
                     if y_position < bottom_margin:
                         c.showPage()
                         y_position = page_height - top_margin
-            
+
             c.save()
             logger.info(f"Simple PDF conversion completed: {pdf_path}")
             return pdf_path
@@ -1513,15 +1479,17 @@ def internal_error(error):
 
 
 
+# ... (rest of the admin routes remain the same as in your original file)
+
 # Initialize Database
 with app.app_context():
     db.create_all()
 
 if __name__ == '__main__':
     try:
-        port = int(os.environ.get('PORT', 8080))
+        port = int(os.environ.get('PORT', 8100))
     except (ValueError, TypeError):
-        port = 8000
+        port = 8100
     
     app.run(debug=os.environ.get('FLASK_DEBUG', 'False').lower() == 'true', 
             host=os.environ.get('HOST', '127.0.0.1'), 
