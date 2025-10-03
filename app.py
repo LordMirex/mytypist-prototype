@@ -471,7 +471,7 @@ class DocumentProcessor:
             return "University of Benin"
             
         # Academic info - ALL FORMATS
-        elif any(x in name_lower for x in ['mat_no', 'matric_no', 'reg_no', 'student_id', 'registration_number']):
+        elif any(x in name_lower for x in ['mat_no', 'matric_no', 'reg_no', 'id', 'student_id', 'registration_number']):
             return "ENG2204223"
      
             

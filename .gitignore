@@ -19,6 +19,7 @@ uploads/
 temp/
 generated/
 db/
+db
 *.db
 *.sqlite3
 
