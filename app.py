@@ -622,156 +622,122 @@ class DocumentProcessor:
 
     @staticmethod
     def convert_to_pdf(docx_path):
-        """Convert DOCX to PDF using simple canvas approach for reliable output."""
+        """Convert DOCX to PDF with cross-platform formatting preservation."""
+        pdf_path = docx_path.replace('.docx', '.pdf')
+        logger.info(f"Starting cross-platform PDF conversion: {docx_path} -> {pdf_path}")
+        
         try:
-            pdf_path = docx_path.replace('.docx', '.pdf')
-            logger.info(f"Starting simple PDF conversion: {docx_path} -> {pdf_path}")
-            # Define font settings BEFORE using them
-            FIXED_FONT_SIZE = 13
-            BASE_FONT_NAME = 'Times-Roman'  # Cross-platform compatible font
-            
-            logger.info(f"Using HARDCODED font: {BASE_FONT_NAME} at size {FIXED_FONT_SIZE}")
-
-            # Open the DOCX
-            doc = Document(docx_path)
-            section = doc.sections[0]
-
-            # Get page dimensions
-            try:
-                page_width = float(section.page_width)
-                page_height = float(section.page_height)
-                left_margin = float(section.left_margin)
-                right_margin = float(section.right_margin)
-                top_margin = float(section.top_margin)
-                bottom_margin = float(section.bottom_margin)
-            except Exception:
-                page_width, page_height = letter
-                left_margin = right_margin = top_margin = bottom_margin = 72
-
-            # Create PDF using simple canvas approach
-            c = canvas.Canvas(pdf_path, pagesize=(page_width, page_height))
-            
-
-            # Font fallback logic: always use built-in fonts if custom fonts are missing
-            def get_reportlab_font(run, base_font):
-                # Only use built-in ReportLab fonts if Bookman is not available
-                # Built-in: Times-Roman, Times-Bold, Times-Italic, Times-BoldItalic
-                if base_font == 'BookmanOldStyle':
-                    # Try to use Bookman if registered
-                    if run.bold and run.italic:
-                        return "BookmanOldStyle-BoldItalic"
-                    elif run.bold:
-                        return "BookmanOldStyle-Bold"
-                    elif run.italic:
-                        return "BookmanOldStyle-Italic"
-                    else:
-                        return "BookmanOldStyle"
-                else:
-                    # Always use built-in Times fonts
-                    if run.bold and run.italic:
-                        return "Times-BoldItalic"
-                    elif run.bold:
-                        return "Times-Bold"
-                    elif run.italic:
-                        return "Times-Italic"
-                    else:
-                        return "Times-Roman"
-
-            # Try to register Bookman fonts, but always fallback to Times-Roman
-            fonts_dir = os.path.join(BASE_DIR, 'fonts')
-            bookman_fonts = [
-                ('BookmanOldStyle', 'BookmanOldStyle-Regular.ttf'),
-                ('BookmanOldStyle-Bold', 'BookmanOldStyle-Bold.ttf'),
-                ('BookmanOldStyle-Italic', 'BookmanOldStyle-Italic.ttf'),
-                ('BookmanOldStyle-BoldItalic', 'BookmanOldStyle-BoldItalic.ttf'),
-            ]
-            bookman_available = True
-            for font_name, font_file in bookman_fonts:
-                font_path = os.path.join(fonts_dir, font_file)
-                if os.path.exists(font_path):
-                    try:
-                        pdfmetrics.registerFont(TTFont(font_name, font_path))
-                    except Exception as e:
-                        logger.warning(f"Failed to register {font_name}: {e}")
-                        bookman_available = False
-                else:
-                    bookman_available = False
-
-            # If any Bookman font is missing, fallback to built-in Times
-            base_font = 'BookmanOldStyle' if bookman_available else 'Times-Roman'
-            if not bookman_available:
-                logger.info("Bookman Old Style fonts not available, using built-in Times-Roman family for PDF output.")
-
-            # Start drawing from top
-            y_position = page_height - top_margin
-
-            for paragraph in doc.paragraphs:
-                if not paragraph.text.strip():
-                    y_position -= FIXED_FONT_SIZE * 1.8
-                    continue
-
-                alignment = paragraph.alignment
-                x_position = left_margin
-                line_parts = []
-
-                for run in paragraph.runs:
-                    if not run.text:
-                        continue
-                    font_string = get_reportlab_font(run, base_font)
-                    font_size = FIXED_FONT_SIZE
-                    line_parts.append({
-                        'text': run.text,
-                        'font': font_string,
-                        'size': font_size,
-                        'underline': run.underline
-                    })
-
-                if line_parts:
-                    total_width = 0
-                    for part in line_parts:
-                        try:
-                            c.setFont(part['font'], part['size'])
-                            total_width += c.stringWidth(part['text'], part['font'], part['size'])
-                        except Exception as e:
-                            logger.warning(f"Font {part['font']} not available, using Times-Roman. Error: {e}")
-                            c.setFont('Times-Roman', part['size'])
-                            total_width += c.stringWidth(part['text'], 'Times-Roman', part['size'])
-
-                    content_width = page_width - left_margin - right_margin
-                    if alignment == 1:
-                        x_position = left_margin + (content_width - total_width) / 2
-                    elif alignment == 2:
-                        x_position = page_width - right_margin - total_width
-                    else:
-                        x_position = left_margin
-
-                    current_x = x_position
-                    for part in line_parts:
-                        try:
-                            c.setFont(part['font'], part['size'])
-                        except Exception as e:
-                            logger.warning(f"Font {part['font']} not available, using Times-Roman. Error: {e}")
-                            c.setFont('Times-Roman', part['size'])
-                        c.drawString(current_x, y_position, part['text'])
-                        if part['underline']:
-                            text_width = c.stringWidth(part['text'], part['font'], part['size'])
-                            c.line(current_x, y_position - 2, current_x + text_width, y_position - 2)
-                        current_x += c.stringWidth(part['text'], part['font'], part['size'])
-
-                    y_position -= FIXED_FONT_SIZE * 1.8
-                    if paragraph.text.strip().endswith('.') or paragraph.text.strip().endswith(':'):
-                        y_position -= FIXED_FONT_SIZE * 0.5
-                    if y_position < bottom_margin:
-                        c.showPage()
-                        y_position = page_height - top_margin
-
-            c.save()
-            logger.info(f"Simple PDF conversion completed: {pdf_path}")
-            return pdf_path
-            
+            return DocumentProcessor._convert_with_platypus(docx_path, pdf_path)
         except Exception as e:
-            logger.error(f"Simple PDF conversion failed: {str(e)}")
+            logger.error(f"Platypus PDF conversion failed: {str(e)}")
             return DocumentProcessor._create_simple_pdf(docx_path)
+    
+    @staticmethod
+    def _convert_with_platypus(docx_path, pdf_path):
+        """Use ReportLab Platypus for better formatting preservation."""
+        logger.info("Using ReportLab Platypus for PDF conversion")
+        
+        # Open the DOCX document
+        doc = Document(docx_path)
+        section = doc.sections[0]
+        
+        # Get page dimensions and margins from DOCX
+        try:
+            page_width = float(section.page_width.emu) / 914400 * 72
+            page_height = float(section.page_height.emu) / 914400 * 72
+            left_margin = float(section.left_margin.emu) / 914400 * 72
+            right_margin = float(section.right_margin.emu) / 914400 * 72
+            top_margin = float(section.top_margin.emu) / 914400 * 72
+            bottom_margin = float(section.bottom_margin.emu) / 914400 * 72
+        except:
+            page_width, page_height = letter
+            left_margin = right_margin = top_margin = bottom_margin = 72
+        
+        logger.info(f"Page: {page_width:.1f}x{page_height:.1f}pt, Margins: {left_margin:.1f}")
+        
+        # Create PDF document with exact dimensions
+        pdf_doc = SimpleDocTemplate(
+            pdf_path,
+            pagesize=(page_width, page_height),
+            leftMargin=left_margin,
+            rightMargin=right_margin,
+            topMargin=top_margin,
+            bottomMargin=bottom_margin
+        )
+        
+        # Build content
+        story = []
+        
+        for paragraph in doc.paragraphs:
+            para_text = paragraph.text.strip()
+            
+            if not para_text:
+                # Add spacing for empty paragraphs
+                story.append(Spacer(1, 12))
+                continue
+            
+            # Get paragraph formatting
+            para_format = paragraph.paragraph_format
+            
+            # Determine alignment
+            alignment = TA_LEFT
+            if paragraph.alignment == 1:  # Center
+                alignment = TA_CENTER
+            elif paragraph.alignment == 2:  # Right
+                alignment = TA_RIGHT
+            elif paragraph.alignment == 3:  # Justify
+                alignment = TA_JUSTIFY
+            
+            # Calculate line spacing
+            line_spacing = 14
+            if para_format.line_spacing:
+                if hasattr(para_format.line_spacing, 'pt'):
+                    line_spacing = para_format.line_spacing.pt
+                else:
+                    line_spacing = 12 * para_format.line_spacing
+            
+            # Build formatted text with runs
+            formatted_text = ""
+            for run in paragraph.runs:
+                if not run.text:
+                    continue
+                
+                text = escape(run.text)  # Escape XML characters
+                
+                # Apply formatting
+                if run.bold and run.italic:
+                    text = f"<b><i>{text}</i></b>"
+                elif run.bold:
+                    text = f"<b>{text}</b>"
+                elif run.italic:
+                    text = f"<i>{text}</i>"
+                
+                if run.underline:
+                    text = f"<u>{text}</u>"
+                
+                formatted_text += text
+            
+            # Create paragraph style
+            style = ParagraphStyle(
+                'CustomStyle',
+                fontName='Times-Roman',
+                fontSize=11,
+                leading=line_spacing,
+                alignment=alignment,
+                spaceAfter=6 if para_text.endswith('.') or para_text.endswith(':') else 0
+            )
+            
+            # Add paragraph to story
+            story.append(Paragraph(formatted_text, style))
+            
+            # Add extra spacing after certain paragraphs
+            if para_format.space_after:
+                story.append(Spacer(1, para_format.space_after.pt))
+        
+        # Build PDF
+        pdf_doc.build(story)
+        logger.info(f"Platypus PDF conversion completed: {pdf_path}")
+        return pdf_path
 
     @staticmethod
     def _create_simple_pdf(docx_path):
@@ -1487,9 +1453,9 @@ with app.app_context():
 
 if __name__ == '__main__':
     try:
-        port = int(os.environ.get('PORT', 8100))
+        port = int(os.environ.get('PORT', 8000))
     except (ValueError, TypeError):
-        port = 8100
+        port = 8000
     
     app.run(debug=os.environ.get('FLASK_DEBUG', 'False').lower() == 'true', 
             host=os.environ.get('HOST', '127.0.0.1'), 
