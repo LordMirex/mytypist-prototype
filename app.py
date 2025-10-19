@@ -4,6 +4,7 @@ from flask_caching import Cache
 from docxtpl import DocxTemplate, RichText
 from werkzeug.utils import secure_filename
 from reportlab.lib.pagesizes import letter
+from reportlab.lib.colors import black, HexColor
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -634,8 +635,8 @@ class DocumentProcessor:
     
     @staticmethod
     def _convert_with_platypus(docx_path, pdf_path):
-        """Use ReportLab Platypus for better formatting preservation."""
-        logger.info("Using ReportLab Platypus for PDF conversion")
+        """Use ReportLab Platypus with accurate font, size, color, and alignment extraction."""
+        logger.info("Starting enhanced PDF conversion with proper formatting extraction")
         
         # Open the DOCX document
         doc = Document(docx_path)
@@ -668,6 +669,30 @@ class DocumentProcessor:
         # Build content
         story = []
         
+        # Detect most common font and size for base style
+        default_font = 'Helvetica'  # Default to Helvetica (cross-platform safe)
+        default_size = 13  # Slightly larger default for better readability
+        try:
+            font_counts = Counter()
+            size_counts = Counter()
+            for para in doc.paragraphs:
+                for run in para.runs:
+                    if run.text.strip():
+                        if run.font.name:
+                            font_counts[run.font.name] += len(run.text)
+                        if run.font.size:
+                            size_counts[run.font.size.pt] += len(run.text)
+            
+            if font_counts:
+                default_font = DocumentProcessor._map_font_to_reportlab(font_counts.most_common(1)[0][0])
+            if size_counts:
+                # Use detected size, but ensure it's at least 12pt for readability
+                default_size = max(12, int(size_counts.most_common(1)[0][0]))
+        except Exception as e:
+            logger.warning(f"Could not detect default font/size: {e}")
+        
+        logger.info(f"Default font: {default_font}, size: {default_size}")
+        
         for paragraph in doc.paragraphs:
             para_text = paragraph.text.strip()
             
@@ -679,32 +704,65 @@ class DocumentProcessor:
             # Get paragraph formatting
             para_format = paragraph.paragraph_format
             
-            # Determine alignment
+            # Determine alignment - check both paragraph.alignment and paragraph_format.alignment
             alignment = TA_LEFT
-            if paragraph.alignment == 1:  # Center
+            para_alignment = paragraph.alignment
+            if para_alignment is None and para_format.alignment is not None:
+                para_alignment = para_format.alignment
+                
+            if para_alignment == 1:  # Center
                 alignment = TA_CENTER
-            elif paragraph.alignment == 2:  # Right
+            elif para_alignment == 2:  # Right
                 alignment = TA_RIGHT
-            elif paragraph.alignment == 3:  # Justify
+            elif para_alignment == 3:  # Justify
                 alignment = TA_JUSTIFY
+            elif para_alignment == 0:  # Explicitly left
+                alignment = TA_LEFT
             
-            # Calculate line spacing
-            line_spacing = 14
+            # Calculate line spacing - balanced for beauty
+            # Word's "single" spacing actually needs slight breathing room
             if para_format.line_spacing:
-                if hasattr(para_format.line_spacing, 'pt'):
-                    line_spacing = para_format.line_spacing.pt
-                else:
-                    line_spacing = 12 * para_format.line_spacing
+                try:
+                    if hasattr(para_format.line_spacing, 'pt'):
+                        line_spacing = para_format.line_spacing.pt
+                    elif para_format.line_spacing == 1.0:
+                        # Single spacing: add 10% breathing room for readability
+                        line_spacing = default_size * 1.1
+                    elif para_format.line_spacing > 0:
+                        # Other multiples: apply the multiplier
+                        line_spacing = default_size * para_format.line_spacing
+                    else:
+                        line_spacing = default_size * 1.1
+                except:
+                    line_spacing = default_size * 1.1
+            else:
+                # Default: 10% breathing room for clean, readable appearance
+                line_spacing = default_size * 1.1
             
-            # Build formatted text with runs
+            # Build formatted text with actual run formatting
             formatted_text = ""
             for run in paragraph.runs:
                 if not run.text:
                     continue
                 
-                text = escape(run.text)  # Escape XML characters
+                # Escape XML characters first, then handle newlines as line breaks
+                text = escape(run.text)
+                text = text.replace('\n', '<br/>')  # Convert newlines to line breaks
                 
-                # Apply formatting
+                # Extract actual font and size from this run
+                run_font = default_font
+                run_size = default_size
+                
+                if run.font.name:
+                    run_font = DocumentProcessor._map_font_to_reportlab(run.font.name)
+                
+                if run.font.size:
+                    run_size = int(run.font.size.pt)
+                
+                # Build formatting in correct order: innermost to outermost
+                # DO NOT use inline color - rely ONLY on ParagraphStyle.textColor
+                
+                # STEP 1: Apply bold/italic (innermost - closest to text)
                 if run.bold and run.italic:
                     text = f"<b><i>{text}</i></b>"
                 elif run.bold:
@@ -712,32 +770,138 @@ class DocumentProcessor:
                 elif run.italic:
                     text = f"<i>{text}</i>"
                 
+                # STEP 2: Apply underline (middle layer)
                 if run.underline:
                     text = f"<u>{text}</u>"
                 
+                # STEP 3: Wrap in font tag with explicit BLACK color
+                # Double enforcement: both inline and at ParagraphStyle level
+                text = f'<font name="{run_font}" size="{run_size}" color="#000000">{text}</font>'
+                
                 formatted_text += text
             
-            # Create paragraph style
+            # Calculate spacing
+            space_before = 0
+            space_after = 0
+            
+            if para_format.space_before:
+                try:
+                    space_before = para_format.space_before.pt
+                except:
+                    pass
+            
+            if para_format.space_after:
+                try:
+                    space_after = para_format.space_after.pt
+                except:
+                    pass
+            
+            # Auto-add balanced spacing for professional, beautiful appearance
+            if space_after == 0:
+                # Salutation gets moderate spacing
+                if para_text.endswith(':') or para_text.endswith(','):
+                    space_after = 6
+                # Title paragraphs get good spacing
+                elif para_text.isupper() and len(para_text) < 50:
+                    space_after = 8
+                # Body paragraphs get moderate spacing
+                elif para_text.endswith('.') and len(para_text) > 50:
+                    space_after = 6
+                # Underline lines get nice spacing
+                elif para_text.startswith('___') or para_text.count('_') > 10:
+                    space_after = 8  # Good space between underline and signature
+            
+            # Calculate indentation - CRITICAL for address alignment and signature block
+            left_indent = 0
+            right_indent = 0
+            first_line_indent = 0
+            
+            if para_format.left_indent:
+                try:
+                    # Convert from EMU to points (1 inch = 914400 EMU, 1 point = 1/72 inch)
+                    if hasattr(para_format.left_indent, 'pt'):
+                        left_indent = para_format.left_indent.pt
+                    else:
+                        # Direct EMU value: divide by 12700 to get points
+                        left_indent = float(para_format.left_indent) / 12700
+                except Exception as e:
+                    logger.debug(f"Could not calculate left indent: {e}")
+            
+            if para_format.right_indent:
+                try:
+                    if hasattr(para_format.right_indent, 'pt'):
+                        right_indent = para_format.right_indent.pt
+                    else:
+                        right_indent = float(para_format.right_indent) / 12700
+                except Exception as e:
+                    logger.debug(f"Could not calculate right indent: {e}")
+            
+            # CRITICAL: Handle first-line indent (for hanging indents like signature block)
+            if para_format.first_line_indent:
+                try:
+                    if hasattr(para_format.first_line_indent, 'pt'):
+                        first_line_indent = para_format.first_line_indent.pt
+                    else:
+                        first_line_indent = float(para_format.first_line_indent) / 12700
+                except Exception as e:
+                    logger.debug(f"Could not calculate first line indent: {e}")
+            
+            # FIX: ReportLab JUSTIFY on short indented text renders as CENTER
+            # For short paragraphs with large left indent, use LEFT alignment instead
+            if alignment == TA_JUSTIFY and left_indent > 200 and len(para_text) < 50:
+                alignment = TA_LEFT
+                logger.debug(f"Changed JUSTIFY to LEFT for short indented text: '{para_text[:30]}'")
+            
+            # Create paragraph style with all calculated values
+            # Use explicit black color (0,0,0) to ensure no color variations
+            black_color = HexColor('#000000')
+            
             style = ParagraphStyle(
                 'CustomStyle',
-                fontName='Times-Roman',
-                fontSize=11,
+                fontName=default_font,
+                fontSize=default_size,
                 leading=line_spacing,
                 alignment=alignment,
-                spaceAfter=6 if para_text.endswith('.') or para_text.endswith(':') else 0
+                spaceBefore=space_before,
+                spaceAfter=space_after,
+                leftIndent=left_indent,
+                rightIndent=right_indent,
+                firstLineIndent=first_line_indent,  # CRITICAL for hanging indents
+                textColor=black_color,  # Explicit black: #000000
+                bulletColor=black_color,  # Ensure bullets are black too
+                linkUnderline=False  # Disable link styling
             )
             
             # Add paragraph to story
             story.append(Paragraph(formatted_text, style))
-            
-            # Add extra spacing after certain paragraphs
-            if para_format.space_after:
-                story.append(Spacer(1, para_format.space_after.pt))
         
         # Build PDF
         pdf_doc.build(story)
-        logger.info(f"Platypus PDF conversion completed: {pdf_path}")
+        logger.info(f"Enhanced PDF conversion completed: {pdf_path}")
         return pdf_path
+    
+    @staticmethod
+    def _map_font_to_reportlab(font_name):
+        """
+        Map Word fonts to ReportLab built-in fonts (cross-platform safe).
+        Uses Helvetica-Bold for Bookman to get similar bold, professional appearance.
+        """
+        # Use ONLY built-in ReportLab fonts (work everywhere: Windows, Linux, servers)
+        font_mapping = {
+            'Times New Roman': 'Times-Roman',
+            'Times': 'Times-Roman',
+            'Arial': 'Helvetica',
+            'Calibri': 'Helvetica',
+            'Courier New': 'Courier',
+            'Courier': 'Courier',
+            # Bookman Old Style → Use Helvetica (clean, professional, bigger than Times)
+            'Bookman Old Style': 'Helvetica',
+        }
+        
+        # Return mapped font (all are built-in, guaranteed to work)
+        mapped = font_mapping.get(font_name, 'Helvetica')
+        logger.debug(f"Font mapping: {font_name} -> {mapped}")
+        return mapped
 
     @staticmethod
     def _create_simple_pdf(docx_path):
@@ -848,6 +1012,25 @@ def create(template_id):
         unique_placeholders.append(first_ph)
     return render_template('create.html', template=template, placeholders=unique_placeholders)
 
+def fix_date_ordinal_casing(text):
+    """
+    Fix ordinal suffix casing in dates intelligently:
+    - If text is ALL UPPERCASE: keep it (19TH SEPTEMBER stays 19TH SEPTEMBER)
+    - If text is Title/Mixed case: lowercase ordinals (19Th September → 19th September)
+    """
+    import re
+    
+    # Check if the entire text is uppercase (user wants uppercase formatting)
+    if text.isupper():
+        return text  # Keep 19TH SEPTEMBER, 2025 as is
+    
+    # Otherwise, fix ordinal suffixes to lowercase: Th/St/Nd/Rd → th/st/nd/rd
+    # This handles: 19Th September → 19th September
+    text = re.sub(r'(\d+)(Th|St|Nd|Rd)\b', 
+                  lambda m: m.group(1) + m.group(2).lower(), 
+                  text)
+    return text
+
 @app.route('/generate', methods=['POST'])
 def generate():
     try:
@@ -857,6 +1040,10 @@ def generate():
         return redirect(url_for('index'))
     format = request.form['format']
     user_inputs = {k: v for k, v in request.form.items() if k not in ['template_id', 'format']}
+    
+    # Fix date ordinal casing in all inputs (18Th -> 18th, etc.)
+    user_inputs = {k: fix_date_ordinal_casing(v) if isinstance(v, str) else v 
+                   for k, v in user_inputs.items()}
 
     # Extract user identification from inputs
     user_name = user_inputs.get('name', 'Anonymous User')
