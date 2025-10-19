@@ -1644,8 +1644,6 @@ def internal_error(error):
 
 
 
-# ... (rest of the admin routes remain the same as in your original file)
-
 # Initialize Database
 with app.app_context():
     db.create_all()
