@@ -3,18 +3,8 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_caching import Cache
 from docxtpl import DocxTemplate, RichText
 from werkzeug.utils import secure_filename
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.colors import black, HexColor
-from reportlab.pdfgen import canvas
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 from docx import Document
 from docx.shared import Inches, Pt
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
-from reportlab.lib.styles import ParagraphStyle
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
-from reportlab.lib.units import inch
-from xml.sax.saxutils import escape
 from collections import defaultdict, Counter
 import os
 import re
@@ -29,6 +19,7 @@ import xml.etree.ElementTree as ET
 from zipfile import ZipFile
 from PIL import Image, ImageDraw, ImageFont
 import tempfile
+import subprocess
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -622,19 +613,65 @@ class DocumentProcessor:
             raise
 
     @staticmethod
-    def convert_to_pdf(docx_path):
-        """Convert DOCX to PDF with cross-platform formatting preservation."""
+    def convert_docx_to_pdf_with_abiword(docx_path):
+        """
+        Converts a DOCX to PDF using AbiWord via subprocess.
+        Requires AbiWord to be installed - will raise an error if not available.
+        Returns: Tuple of (bool, str) - (success, pdf_path)
+        """
         pdf_path = docx_path.replace('.docx', '.pdf')
-        logger.info(f"Starting cross-platform PDF conversion: {docx_path} -> {pdf_path}")
+        logger.info(f"Starting AbiWord PDF conversion: {docx_path} -> {pdf_path}")
         
         try:
-            return DocumentProcessor._convert_with_platypus(docx_path, pdf_path)
+            # Check if AbiWord is available
+            subprocess.run(['which', 'abiword'], check=True, capture_output=True)
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            error_msg = "AbiWord is not installed. PDF conversion requires AbiWord."
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+
+        try:
+            # Run AbiWord conversion with timeout
+            result = subprocess.run([
+                'abiword',
+                '--verbose',  # Add verbose output for better error logging
+                '--to=pdf',
+                '-o', pdf_path,
+                docx_path
+            ], check=True, capture_output=True, text=True, timeout=30)  # 30 second timeout
+            
+            if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+                logger.info(f"PDF generated successfully with AbiWord: {pdf_path}")
+                return True, pdf_path
+            else:
+                error_msg = f"AbiWord failed to generate PDF.\nOutput: {result.stdout}\nErrors: {result.stderr}"
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+        
+        except subprocess.CalledProcessError as e:
+            error_msg = f"AbiWord conversion failed: {e.stderr}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+        
         except Exception as e:
-            logger.error(f"Platypus PDF conversion failed: {str(e)}")
-            return DocumentProcessor._create_simple_pdf(docx_path)
+            error_msg = f"Unexpected error in AbiWord conversion: {str(e)}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+                    if line:
+                        c.drawString(72, y, ' '.join(line))
+                        y -= 15
+                
+                y -= 10  # Extra space between paragraphs
+            
+            c.save()
+            return True, pdf_path
+            
+        except Exception as e:
+            logger.error(f"ReportLab PDF conversion failed: {str(e)}")
+            return False, None
     
     @staticmethod
-    def _convert_with_platypus(docx_path, pdf_path):
+    def _map_docx_alignment(alignment):
         """Use ReportLab Platypus with accurate font, size, color, and alignment extraction."""
         logger.info("Starting enhanced PDF conversion with proper formatting extraction")
         
@@ -880,45 +917,6 @@ class DocumentProcessor:
         logger.info(f"Enhanced PDF conversion completed: {pdf_path}")
         return pdf_path
     
-    @staticmethod
-    def _map_font_to_reportlab(font_name):
-        """
-        Map Word fonts to ReportLab built-in fonts (cross-platform safe).
-        Uses Helvetica-Bold for Bookman to get similar bold, professional appearance.
-        """
-        # Use ONLY built-in ReportLab fonts (work everywhere: Windows, Linux, servers)
-        font_mapping = {
-            'Times New Roman': 'Times-Roman',
-            'Times': 'Times-Roman',
-            'Arial': 'Helvetica',
-            'Calibri': 'Helvetica',
-            'Courier New': 'Courier',
-            'Courier': 'Courier',
-            # Bookman Old Style → Use Helvetica (clean, professional, bigger than Times)
-            'Bookman Old Style': 'Helvetica',
-        }
-        
-        # Return mapped font (all are built-in, guaranteed to work)
-        mapped = font_mapping.get(font_name, 'Helvetica')
-        logger.debug(f"Font mapping: {font_name} -> {mapped}")
-        return mapped
-
-    @staticmethod
-    def _create_simple_pdf(docx_path):
-        """Create a simple PDF as a clear fallback indicating conversion error."""
-        pdf_path = docx_path.replace('.docx', '.pdf')
-        try:
-            c = canvas.Canvas(pdf_path, pagesize=letter)
-            c.setFont("Times-Roman", 12)
-            c.drawString(72, 750, "PDF Conversion Error")
-            c.drawString(72, 730, "The system could not fully render the DOCX to PDF.")
-            c.drawString(72, 712, "Please download the DOCX instead, or contact support.")
-            c.save()
-            return pdf_path
-        except Exception as e:
-            logger.error(f"Simple PDF creation also failed: {str(e)}")
-            raise
-
 # FIXED Batch Processing - No threading, proper context management
 def process_batch(template_ids, user_inputs, user_name, user_email=None):
     """Fixed batch processing that actually works - generates documents sequentially."""
@@ -1055,8 +1053,12 @@ def generate():
         if format == 'docx':
             return send_file(output_path, as_attachment=True, download_name=doc.original_filename)
         elif format == 'pdf':
-            pdf_path = DocumentProcessor.convert_to_pdf(output_path)
-            return send_file(pdf_path, as_attachment=True, download_name=doc.original_filename.replace('.docx', '.pdf'))
+            try:
+                success, pdf_path = DocumentProcessor.convert_docx_to_pdf_with_abiword(output_path)
+                return send_file(pdf_path, as_attachment=True, download_name=doc.original_filename.replace('.docx', '.pdf'))
+            except RuntimeError as e:
+                flash(str(e), 'error')
+                return redirect(url_for('index'))
     except ValueError as e:
         flash(str(e), 'error')
         return redirect(url_for('create', template_id=template_id))
@@ -1078,8 +1080,13 @@ def download(document_id, format):
     elif format == 'pdf':
         pdf_path = docx_path.replace('.docx', '.pdf')
         if not os.path.exists(pdf_path):
-            DocumentProcessor.convert_to_pdf(docx_path)
-        return send_file(pdf_path, as_attachment=True, download_name=document.original_filename.replace('.docx', '.pdf'))
+            success, converted_pdf_path = DocumentProcessor.convert_docx_to_pdf_with_abiword(docx_path)
+            if success:
+                document.conversion_method = 'abiword' if 'abiword' in subprocess.check_output(['which', 'abiword']).decode() else 'reportlab'
+                db.session.commit()
+                return send_file(converted_pdf_path, as_attachment=True, download_name=document.original_filename.replace('.docx', '.pdf'))
+            else:
+                abort(500, description="PDF conversion failed")
     abort(400)
 
 @app.route('/batch', methods=['GET', 'POST'])
@@ -1261,7 +1268,12 @@ def batch_download_pdf(batch_id):
                 
                 # Generate PDF if it doesn't exist
                 if not os.path.exists(pdf_path) and os.path.exists(docx_path):
-                    DocumentProcessor.convert_to_pdf(docx_path)
+                    try:
+                        success, converted_pdf_path = DocumentProcessor.convert_docx_to_pdf_with_abiword(docx_path)
+                        pdf_path = converted_pdf_path
+                    except RuntimeError as e:
+                        logger.error(f"PDF conversion failed for {doc.original_filename}: {str(e)}")
+                        continue
                 
                 # Add PDF file to ZIP if it exists
                 if os.path.exists(pdf_path):
