@@ -655,28 +655,68 @@ class DocumentProcessor:
         try:
             if is_windows:
                 # Direct AbiWord call on Windows
-                result = subprocess.run([
-                    abiword_path,
-                    '--to=pdf',
-                    docx_path,
-                    '-o', pdf_path
-                ], check=True, capture_output=True, text=True, timeout=30)
+                try:
+                    # First try with shell=False
+                    command = [
+                        abiword_path,
+                        '--verbose',
+                        '--to=pdf',
+                        docx_path
+                    ]
+                    result = subprocess.run(command, 
+                                         check=True, 
+                                         capture_output=True, 
+                                         text=True, 
+                                         timeout=30,
+                                         shell=False)
+                except subprocess.CalledProcessError as e:
+                    # If first attempt fails, try with shell=True
+                    logger.warning(f"First AbiWord attempt failed, trying with shell=True. Error: {str(e)}")
+                    command = f'"{abiword_path}" --verbose --to=pdf "{docx_path}"'
+                    result = subprocess.run(command,
+                                         check=True,
+                                         capture_output=True,
+                                         text=True,
+                                         timeout=30,
+                                         shell=True)
+                
+                # On Windows, AbiWord automatically saves the PDF in the same directory
+                # with the same name but .pdf extension
+                if not os.path.exists(pdf_path):
+                    # Try to find the PDF in the same directory
+                    expected_pdf = os.path.splitext(docx_path)[0] + '.pdf'
+                    if os.path.exists(expected_pdf):
+                        # Move the file to the desired location
+                        os.rename(expected_pdf, pdf_path)
             else:
                 # Use xvfb-run for headless operation on Unix/Linux
                 result = subprocess.run([
                     'xvfb-run',
                     '--auto-servernum',
                     'abiword',
+                    '--verbose',
                     '--to=pdf',
                     docx_path,
                     '-o', pdf_path
                 ], check=True, capture_output=True, text=True, timeout=30)  # 30 second timeout
             
+            # Wait a moment for file system
+            time.sleep(1)
+            
             if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
                 logger.info(f"PDF generated successfully with AbiWord: {pdf_path}")
                 return True, pdf_path
             else:
-                error_msg = f"AbiWord failed to generate PDF.\nOutput: {result.stdout}\nErrors: {result.stderr}"
+                error_msg = (
+                    f"AbiWord conversion failed:\n"
+                    f"Command output: {result.stdout}\n"
+                    f"Error output: {result.stderr}\n"
+                    f"AbiWord path: {abiword_path}\n"
+                    f"Input file exists: {os.path.exists(docx_path)}\n"
+                    f"Input file size: {os.path.getsize(docx_path) if os.path.exists(docx_path) else 'N/A'}\n"
+                    f"Output path: {pdf_path}\n"
+                    f"OS: {'Windows' if is_windows else 'Unix/Linux'}"
+                )
                 logger.error(error_msg)
                 raise RuntimeError(error_msg)
         
