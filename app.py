@@ -617,29 +617,60 @@ class DocumentProcessor:
         """
         Converts a DOCX to PDF using AbiWord via subprocess.
         Requires AbiWord to be installed - will raise an error if not available.
+        Works on both Windows and Linux environments.
         Returns: Tuple of (bool, str) - (success, pdf_path)
         """
         pdf_path = docx_path.replace('.docx', '.pdf')
         logger.info(f"Starting AbiWord PDF conversion: {docx_path} -> {pdf_path}")
         
-        try:
-            # Check if AbiWord is available
-            subprocess.run(['which', 'abiword'], check=True, capture_output=True)
-        except (FileNotFoundError, subprocess.CalledProcessError):
-            error_msg = "AbiWord is not installed. PDF conversion requires AbiWord."
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
+        # Windows-specific paths to check
+        windows_paths = [
+            r"C:\Program Files (x86)\AbiWord\bin\AbiWord.exe",
+            r"C:\Program Files\AbiWord\bin\AbiWord.exe",
+        ]
+        
+        is_windows = os.name == 'nt'
+        abiword_path = None
+        
+        if is_windows:
+            # Check Windows paths
+            for path in windows_paths:
+                if os.path.exists(path):
+                    abiword_path = path
+                    break
+            if not abiword_path:
+                error_msg = "AbiWord is not installed in standard Windows locations."
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+        else:
+            # Unix/Linux check
+            try:
+                subprocess.run(['which', 'abiword'], check=True, capture_output=True)
+                abiword_path = 'abiword'  # Use command name directly on Unix
+            except (FileNotFoundError, subprocess.CalledProcessError):
+                error_msg = "AbiWord is not installed. PDF conversion requires AbiWord."
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
 
         try:
-            # Run AbiWord conversion with xvfb-run for headless operation
-            result = subprocess.run([
-                'xvfb-run',
-                '--auto-servernum',
-                'abiword',
-                '--to=pdf',
-                docx_path,
-                '-o', pdf_path
-            ], check=True, capture_output=True, text=True, timeout=30)  # 30 second timeout
+            if is_windows:
+                # Direct AbiWord call on Windows
+                result = subprocess.run([
+                    abiword_path,
+                    '--to=pdf',
+                    docx_path,
+                    '-o', pdf_path
+                ], check=True, capture_output=True, text=True, timeout=30)
+            else:
+                # Use xvfb-run for headless operation on Unix/Linux
+                result = subprocess.run([
+                    'xvfb-run',
+                    '--auto-servernum',
+                    'abiword',
+                    '--to=pdf',
+                    docx_path,
+                    '-o', pdf_path
+                ], check=True, capture_output=True, text=True, timeout=30)  # 30 second timeout
             
             if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
                 logger.info(f"PDF generated successfully with AbiWord: {pdf_path}")
