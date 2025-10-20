@@ -9,8 +9,7 @@ docxtpl==0.16.7
 python-docx==1.1.0
 python-dateutil==2.8.2
 
-# PDF generation - PROPER REPORTLAB CONVERSION
-reportlab>=4.2.0,<5.0
+# Image processing
 Pillow>=9.5.0
 
 # Development/Monitoring
