@@ -656,29 +656,68 @@ class DocumentProcessor:
             if is_windows:
                 # Direct AbiWord call on Windows
                 try:
-                    # First try with shell=False
+                    # Create a startupinfo object to hide the console window
+                    startupinfo = subprocess.STARTUPINFO()
+                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    startupinfo.wShowWindow = subprocess.SW_HIDE
+
+                    # Convert paths to Windows format and ensure they're properly quoted
+                    safe_docx_path = os.path.normpath(docx_path)
+                    safe_pdf_path = os.path.normpath(pdf_path)
+                    
+                    # First try: direct conversion to specific output path
                     command = [
                         abiword_path,
                         '--verbose',
                         '--to=pdf',
-                        docx_path
+                        safe_docx_path,
+                        '--to-name', safe_pdf_path
                     ]
+                    
+                    logger.info(f"Attempting Windows conversion with command: {' '.join(command)}")
+                    
                     result = subprocess.run(command, 
                                          check=True, 
                                          capture_output=True, 
                                          text=True, 
-                                         timeout=30,
-                                         shell=False)
-                except subprocess.CalledProcessError as e:
-                    # If first attempt fails, try with shell=True
-                    logger.warning(f"First AbiWord attempt failed, trying with shell=True. Error: {str(e)}")
-                    command = f'"{abiword_path}" --verbose --to=pdf "{docx_path}"'
+                                         timeout=60,  # Increased timeout
+                                         shell=False,
+                                         startupinfo=startupinfo)
+                    
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                    logger.warning(f"First attempt failed: {str(e)}, trying alternative method...")
+                    
+                    # Second try: Use temp directory to avoid path issues
+                    temp_dir = os.path.join(os.environ.get('TEMP', ''), 'mytypist_temp')
+                    os.makedirs(temp_dir, exist_ok=True)
+                    
+                    temp_docx = os.path.join(temp_dir, 'temp.docx')
+                    temp_pdf = os.path.join(temp_dir, 'temp.pdf')
+                    
+                    # Copy document to temp location
+                    import shutil
+                    shutil.copy2(safe_docx_path, temp_docx)
+                    
+                    # Try conversion in temp directory
+                    command = [
+                        abiword_path,
+                        '--verbose',
+                        '--to=pdf',
+                        temp_docx
+                    ]
+                    
                     result = subprocess.run(command,
                                          check=True,
                                          capture_output=True,
                                          text=True,
-                                         timeout=30,
-                                         shell=True)
+                                         timeout=60,  # Increased timeout
+                                         shell=False,
+                                         startupinfo=startupinfo)
+                    
+                    # If successful, move the PDF to desired location
+                    temp_pdf_actual = os.path.splitext(temp_docx)[0] + '.pdf'
+                    if os.path.exists(temp_pdf_actual):
+                        shutil.move(temp_pdf_actual, safe_pdf_path)
                 
                 # On Windows, AbiWord automatically saves the PDF in the same directory
                 # with the same name but .pdf extension
@@ -700,25 +739,32 @@ class DocumentProcessor:
                     '-o', pdf_path
                 ], check=True, capture_output=True, text=True, timeout=30)  # 30 second timeout
             
-            # Wait a moment for file system
-            time.sleep(1)
+            # Increased wait time for Windows
+            max_wait = 10  # Maximum seconds to wait
+            wait_interval = 0.5  # Check every half second
+            attempts = 0
             
-            if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
-                logger.info(f"PDF generated successfully with AbiWord: {pdf_path}")
-                return True, pdf_path
-            else:
-                error_msg = (
-                    f"AbiWord conversion failed:\n"
-                    f"Command output: {result.stdout}\n"
-                    f"Error output: {result.stderr}\n"
-                    f"AbiWord path: {abiword_path}\n"
-                    f"Input file exists: {os.path.exists(docx_path)}\n"
-                    f"Input file size: {os.path.getsize(docx_path) if os.path.exists(docx_path) else 'N/A'}\n"
-                    f"Output path: {pdf_path}\n"
-                    f"OS: {'Windows' if is_windows else 'Unix/Linux'}"
-                )
-                logger.error(error_msg)
-                raise RuntimeError(error_msg)
+            while attempts * wait_interval < max_wait:
+                if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+                    logger.info(f"PDF generated successfully with AbiWord: {pdf_path}")
+                    return True, pdf_path
+                time.sleep(wait_interval)
+                attempts += 1
+            
+            # If we get here, the PDF wasn't created successfully
+            error_msg = (
+                f"AbiWord conversion failed:\n"
+                f"Command output: {result.stdout}\n"
+                f"Error output: {result.stderr}\n"
+                f"AbiWord path: {abiword_path}\n"
+                f"Input file exists: {os.path.exists(docx_path)}\n"
+                f"Input file size: {os.path.getsize(docx_path) if os.path.exists(docx_path) else 'N/A'}\n"
+                f"Output path: {pdf_path}\n"
+                f"OS: {'Windows' if is_windows else 'Unix/Linux'}\n"
+                f"Temp directory used: {temp_dir if 'temp_dir' in locals() else 'N/A'}"
+            )
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
         
         except subprocess.CalledProcessError as e:
             error_msg = f"AbiWord conversion failed: {e.stderr}"
