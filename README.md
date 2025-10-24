@@ -69,9 +69,10 @@ A Flask-based web application for generating professional documents from DOCX te
    ```
 
    **Perfect PDF Generation:**
-   - PDFs are generated using pure Python (ReportLab) with exact DOCX formatting
-   - No external applications required - works anywhere Python runs
-   - Self-contained solution that can be hosted on any platform
+   - PDFs are generated using Aspose.Words for perfect DOCX fidelity
+   - No external applications or GUI tools required
+   - Works in any headless environment (Heroku, PythonAnywhere, etc.)
+   - Lightning-fast conversion (under 2 seconds)
 
 4. **Database Setup**
    ```bash

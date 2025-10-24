@@ -613,180 +613,44 @@ class DocumentProcessor:
             raise
 
     @staticmethod
-    def convert_docx_to_pdf_with_abiword(docx_path):
+    def convert_docx_to_pdf(docx_path):
         """
-        Converts a DOCX to PDF using AbiWord via subprocess.
-        Requires AbiWord to be installed - will raise an error if not available.
-        Works on both Windows and Linux environments.
-        Returns: Tuple of (bool, str) - (success, pdf_path)
+        Convert DOCX to PDF using Aspose.Words.
+        Returns: Tuple of (bool, str) - (success, pdf_path or error_message)
         """
+        if not docx_path.endswith('.docx'):
+            return False, "Input file must be a .docx file"
+
         pdf_path = docx_path.replace('.docx', '.pdf')
-        logger.info(f"Starting AbiWord PDF conversion: {docx_path} -> {pdf_path}")
-        
-        # Windows-specific paths to check
-        windows_paths = [
-            r"C:\Program Files (x86)\AbiWord\bin\AbiWord.exe",
-            r"C:\Program Files\AbiWord\bin\AbiWord.exe",
-        ]
-        
-        is_windows = os.name == 'nt'
-        abiword_path = None
-        
-        if is_windows:
-            # Check Windows paths
-            for path in windows_paths:
-                if os.path.exists(path):
-                    abiword_path = path
-                    break
-            if not abiword_path:
-                error_msg = "AbiWord is not installed in standard Windows locations."
-                logger.error(error_msg)
-                raise RuntimeError(error_msg)
-        else:
-            # Unix/Linux check
-            try:
-                subprocess.run(['which', 'abiword'], check=True, capture_output=True)
-                abiword_path = 'abiword'  # Use command name directly on Unix
-            except (FileNotFoundError, subprocess.CalledProcessError):
-                error_msg = "AbiWord is not installed. PDF conversion requires AbiWord."
-                logger.error(error_msg)
-                raise RuntimeError(error_msg)
-
         try:
-            if is_windows:
-                # Direct AbiWord call on Windows
-                try:
-                    # Create a startupinfo object to hide the console window
-                    startupinfo = subprocess.STARTUPINFO()
-                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                    startupinfo.wShowWindow = subprocess.SW_HIDE
-
-                    # Convert paths to Windows format and ensure they're properly quoted
-                    safe_docx_path = os.path.normpath(docx_path)
-                    safe_pdf_path = os.path.normpath(pdf_path)
-                    
-                    # First try: direct conversion to specific output path
-                    command = [
-                        abiword_path,
-                        '--verbose',
-                        '--to=pdf',
-                        safe_docx_path,
-                        '--to-name', safe_pdf_path
-                    ]
-                    
-                    logger.info(f"Attempting Windows conversion with command: {' '.join(command)}")
-                    
-                    result = subprocess.run(command, 
-                                         check=True, 
-                                         capture_output=True, 
-                                         text=True, 
-                                         timeout=60,  # Increased timeout
-                                         shell=False,
-                                         startupinfo=startupinfo)
-                    
-                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                    logger.warning(f"First attempt failed: {str(e)}, trying alternative method...")
-                    
-                    # Second try: Use temp directory to avoid path issues
-                    temp_dir = os.path.join(os.environ.get('TEMP', ''), 'mytypist_temp')
-                    os.makedirs(temp_dir, exist_ok=True)
-                    
-                    temp_docx = os.path.join(temp_dir, 'temp.docx')
-                    temp_pdf = os.path.join(temp_dir, 'temp.pdf')
-                    
-                    # Copy document to temp location
-                    import shutil
-                    shutil.copy2(safe_docx_path, temp_docx)
-                    
-                    # Try conversion in temp directory
-                    command = [
-                        abiword_path,
-                        '--verbose',
-                        '--to=pdf',
-                        temp_docx
-                    ]
-                    
-                    result = subprocess.run(command,
-                                         check=True,
-                                         capture_output=True,
-                                         text=True,
-                                         timeout=60,  # Increased timeout
-                                         shell=False,
-                                         startupinfo=startupinfo)
-                    
-                    # If successful, move the PDF to desired location
-                    temp_pdf_actual = os.path.splitext(temp_docx)[0] + '.pdf'
-                    if os.path.exists(temp_pdf_actual):
-                        shutil.move(temp_pdf_actual, safe_pdf_path)
-                
-                # On Windows, AbiWord automatically saves the PDF in the same directory
-                # with the same name but .pdf extension
-                if not os.path.exists(pdf_path):
-                    # Try to find the PDF in the same directory
-                    expected_pdf = os.path.splitext(docx_path)[0] + '.pdf'
-                    if os.path.exists(expected_pdf):
-                        # Move the file to the desired location
-                        os.rename(expected_pdf, pdf_path)
+            import aspose.words as aw
+            logger.info(f"PDF export started via Aspose.Words: {docx_path}")
+            
+            # Set globalization mode for Linux environments
+            os.environ["System.Globalization.Invariant"] = "true"
+            
+            # Load DOCX and save as PDF with identical formatting
+            doc = aw.Document(docx_path)
+            doc.save(pdf_path)
+            
+            if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+                logger.info(f"PDF export complete → {pdf_path}")
+                return True, pdf_path
             else:
-                # Use xvfb-run for headless operation on Unix/Linux
-                result = subprocess.run([
-                    'xvfb-run',
-                    '--auto-servernum',
-                    'abiword',
-                    '--verbose',
-                    '--to=pdf',
-                    docx_path,
-                    '-o', pdf_path
-                ], check=True, capture_output=True, text=True, timeout=30)  # 30 second timeout
-            
-            # Increased wait time for Windows
-            max_wait = 10  # Maximum seconds to wait
-            wait_interval = 0.5  # Check every half second
-            attempts = 0
-            
-            while attempts * wait_interval < max_wait:
-                if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
-                    logger.info(f"PDF generated successfully with AbiWord: {pdf_path}")
-                    return True, pdf_path
-                time.sleep(wait_interval)
-                attempts += 1
-            
-            # If we get here, the PDF wasn't created successfully
-            error_msg = (
-                f"AbiWord conversion failed:\n"
-                f"Command output: {result.stdout}\n"
-                f"Error output: {result.stderr}\n"
-                f"AbiWord path: {abiword_path}\n"
-                f"Input file exists: {os.path.exists(docx_path)}\n"
-                f"Input file size: {os.path.getsize(docx_path) if os.path.exists(docx_path) else 'N/A'}\n"
-                f"Output path: {pdf_path}\n"
-                f"OS: {'Windows' if is_windows else 'Unix/Linux'}\n"
-                f"Temp directory used: {temp_dir if 'temp_dir' in locals() else 'N/A'}"
-            )
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
-        
-        except subprocess.CalledProcessError as e:
-            error_msg = f"AbiWord conversion failed: {e.stderr}"
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
-        
+                error_msg = "PDF conversion failed - output file was not created or is empty"
+                logger.error(error_msg)
+                return False, error_msg
         except Exception as e:
-            error_msg = f"Unexpected error in AbiWord conversion: {str(e)}"
+            error_msg = f"PDF conversion failed: {str(e)}"
             logger.error(error_msg)
-            raise RuntimeError(error_msg)
-            return False, None
+            return False, error_msg
     
     @staticmethod
-    def _map_docx_alignment(alignment):
-        """Use ReportLab Platypus with accurate font, size, color, and alignment extraction."""
-        logger.info("Starting enhanced PDF conversion with proper formatting extraction")
-        
-        # Open the DOCX document
-        doc = Document(docx_path)
-        section = doc.sections[0]
-        
-        # Get page dimensions and margins from DOCX
+    def _get_temp_path(filename):
+        """Get path in the temporary storage directory."""
+        temp_dir = os.path.join(current_app.root_path, 'generated')
+        os.makedirs(temp_dir, exist_ok=True)
+        return os.path.join(temp_dir, filename)
         try:
             page_width = float(section.page_width.emu) / 914400 * 72
             page_height = float(section.page_height.emu) / 914400 * 72
@@ -828,7 +692,7 @@ class DocumentProcessor:
                             size_counts[run.font.size.pt] += len(run.text)
             
             if font_counts:
-                default_font = DocumentProcessor._map_font_to_reportlab(font_counts.most_common(1)[0][0])
+                default_font = font_counts.most_common(1)[0][0]
             if size_counts:
                 # Use detected size, but ensure it's at least 12pt for readability
                 default_size = max(12, int(size_counts.most_common(1)[0][0]))
@@ -898,7 +762,7 @@ class DocumentProcessor:
                 run_size = default_size
                 
                 if run.font.name:
-                    run_font = DocumentProcessor._map_font_to_reportlab(run.font.name)
+                    run_font = run.font.name
                 
                 if run.font.size:
                     run_size = int(run.font.size.pt)
@@ -990,7 +854,7 @@ class DocumentProcessor:
                 except Exception as e:
                     logger.debug(f"Could not calculate first line indent: {e}")
             
-            # FIX: ReportLab JUSTIFY on short indented text renders as CENTER
+            # Process text alignment and indentation
             # For short paragraphs with large left indent, use LEFT alignment instead
             if alignment == TA_JUSTIFY and left_indent > 200 and len(para_text) < 50:
                 alignment = TA_LEFT
@@ -1161,9 +1025,13 @@ def generate():
             return send_file(output_path, as_attachment=True, download_name=doc.original_filename)
         elif format == 'pdf':
             try:
-                success, pdf_path = DocumentProcessor.convert_docx_to_pdf_with_abiword(output_path)
-                return send_file(pdf_path, as_attachment=True, download_name=doc.original_filename.replace('.docx', '.pdf'))
-            except RuntimeError as e:
+                success, pdf_path = Document.convert_docx_to_pdf(output_path)
+                if success:
+                    return send_file(pdf_path, as_attachment=True, download_name=doc.original_filename.replace('.docx', '.pdf'))
+                else:
+                    flash('PDF conversion failed. See logs for details.', 'error')
+                    return redirect(url_for('index'))
+            except Exception as e:
                 flash(str(e), 'error')
                 return redirect(url_for('index'))
     except ValueError as e:
@@ -1187,9 +1055,9 @@ def download(document_id, format):
     elif format == 'pdf':
         pdf_path = docx_path.replace('.docx', '.pdf')
         if not os.path.exists(pdf_path):
-            success, converted_pdf_path = DocumentProcessor.convert_docx_to_pdf_with_abiword(docx_path)
+            success, converted_pdf_path = Document.convert_docx_to_pdf(docx_path)
             if success:
-                document.conversion_method = 'abiword' if 'abiword' in subprocess.check_output(['which', 'abiword']).decode() else 'reportlab'
+                document.conversion_method = 'docx2pdf'
                 db.session.commit()
                 return send_file(converted_pdf_path, as_attachment=True, download_name=document.original_filename.replace('.docx', '.pdf'))
             else:
@@ -1376,9 +1244,13 @@ def batch_download_pdf(batch_id):
                 # Generate PDF if it doesn't exist
                 if not os.path.exists(pdf_path) and os.path.exists(docx_path):
                     try:
-                        success, converted_pdf_path = DocumentProcessor.convert_docx_to_pdf_with_abiword(docx_path)
-                        pdf_path = converted_pdf_path
-                    except RuntimeError as e:
+                        success, converted_pdf_path = Document.convert_docx_to_pdf(docx_path)
+                        if success:
+                            pdf_path = converted_pdf_path
+                        else:
+                            logger.error(f"PDF conversion failed for {doc.original_filename}: {converted_pdf_path}")
+                            continue
+                    except Exception as e:
                         logger.error(f"PDF conversion failed for {doc.original_filename}: {str(e)}")
                         continue
                 
