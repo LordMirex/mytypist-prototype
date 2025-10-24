@@ -8,7 +8,7 @@ Werkzeug==2.3.7
 docxtpl==0.16.7  # Template processing
 python-docx==1.1.0  # DOCX manipulation
 python-dateutil==2.8.2
-aspose-words  # PDF conversion with perfect fidelity
+# TODO: PDF conversion library to be added later
 
 # Image processing
 Pillow>=9.5.0

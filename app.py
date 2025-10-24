@@ -612,38 +612,7 @@ class DocumentProcessor:
             logger.error(f"Document generation failed: {str(e)}")
             raise
 
-    @staticmethod
-    def convert_docx_to_pdf(docx_path):
-        """
-        Convert DOCX to PDF using Aspose.Words.
-        Returns: Tuple of (bool, str) - (success, pdf_path or error_message)
-        """
-        if not docx_path.endswith('.docx'):
-            return False, "Input file must be a .docx file"
-
-        pdf_path = docx_path.replace('.docx', '.pdf')
-        try:
-            import aspose.words as aw
-            logger.info(f"PDF export started via Aspose.Words: {docx_path}")
-            
-            # Set globalization mode for Linux environments
-            os.environ["System.Globalization.Invariant"] = "true"
-            
-            # Load DOCX and save as PDF with identical formatting
-            doc = aw.Document(docx_path)
-            doc.save(pdf_path)
-            
-            if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
-                logger.info(f"PDF export complete → {pdf_path}")
-                return True, pdf_path
-            else:
-                error_msg = "PDF conversion failed - output file was not created or is empty"
-                logger.error(error_msg)
-                return False, error_msg
-        except Exception as e:
-            error_msg = f"PDF conversion failed: {str(e)}"
-            logger.error(error_msg)
-            return False, error_msg
+    
     
     @staticmethod
     def _get_temp_path(filename):
@@ -651,242 +620,8 @@ class DocumentProcessor:
         temp_dir = os.path.join(current_app.root_path, 'generated')
         os.makedirs(temp_dir, exist_ok=True)
         return os.path.join(temp_dir, filename)
-        try:
-            page_width = float(section.page_width.emu) / 914400 * 72
-            page_height = float(section.page_height.emu) / 914400 * 72
-            left_margin = float(section.left_margin.emu) / 914400 * 72
-            right_margin = float(section.right_margin.emu) / 914400 * 72
-            top_margin = float(section.top_margin.emu) / 914400 * 72
-            bottom_margin = float(section.bottom_margin.emu) / 914400 * 72
-        except:
-            page_width, page_height = letter
-            left_margin = right_margin = top_margin = bottom_margin = 72
         
-        logger.info(f"Page: {page_width:.1f}x{page_height:.1f}pt, Margins: {left_margin:.1f}")
-        
-        # Create PDF document with exact dimensions
-        pdf_doc = SimpleDocTemplate(
-            pdf_path,
-            pagesize=(page_width, page_height),
-            leftMargin=left_margin,
-            rightMargin=right_margin,
-            topMargin=top_margin,
-            bottomMargin=bottom_margin
-        )
-        
-        # Build content
-        story = []
-        
-        # Detect most common font and size for base style
-        default_font = 'Helvetica'  # Default to Helvetica (cross-platform safe)
-        default_size = 13  # Slightly larger default for better readability
-        try:
-            font_counts = Counter()
-            size_counts = Counter()
-            for para in doc.paragraphs:
-                for run in para.runs:
-                    if run.text.strip():
-                        if run.font.name:
-                            font_counts[run.font.name] += len(run.text)
-                        if run.font.size:
-                            size_counts[run.font.size.pt] += len(run.text)
-            
-            if font_counts:
-                default_font = font_counts.most_common(1)[0][0]
-            if size_counts:
-                # Use detected size, but ensure it's at least 12pt for readability
-                default_size = max(12, int(size_counts.most_common(1)[0][0]))
-        except Exception as e:
-            logger.warning(f"Could not detect default font/size: {e}")
-        
-        logger.info(f"Default font: {default_font}, size: {default_size}")
-        
-        for paragraph in doc.paragraphs:
-            para_text = paragraph.text.strip()
-            
-            if not para_text:
-                # Add spacing for empty paragraphs
-                story.append(Spacer(1, 12))
-                continue
-            
-            # Get paragraph formatting
-            para_format = paragraph.paragraph_format
-            
-            # Determine alignment - check both paragraph.alignment and paragraph_format.alignment
-            alignment = TA_LEFT
-            para_alignment = paragraph.alignment
-            if para_alignment is None and para_format.alignment is not None:
-                para_alignment = para_format.alignment
-                
-            if para_alignment == 1:  # Center
-                alignment = TA_CENTER
-            elif para_alignment == 2:  # Right
-                alignment = TA_RIGHT
-            elif para_alignment == 3:  # Justify
-                alignment = TA_JUSTIFY
-            elif para_alignment == 0:  # Explicitly left
-                alignment = TA_LEFT
-            
-            # Calculate line spacing - balanced for beauty
-            # Word's "single" spacing actually needs slight breathing room
-            if para_format.line_spacing:
-                try:
-                    if hasattr(para_format.line_spacing, 'pt'):
-                        line_spacing = para_format.line_spacing.pt
-                    elif para_format.line_spacing == 1.0:
-                        # Single spacing: add 10% breathing room for readability
-                        line_spacing = default_size * 1.1
-                    elif para_format.line_spacing > 0:
-                        # Other multiples: apply the multiplier
-                        line_spacing = default_size * para_format.line_spacing
-                    else:
-                        line_spacing = default_size * 1.1
-                except:
-                    line_spacing = default_size * 1.1
-            else:
-                # Default: 10% breathing room for clean, readable appearance
-                line_spacing = default_size * 1.1
-            
-            # Build formatted text with actual run formatting
-            formatted_text = ""
-            for run in paragraph.runs:
-                if not run.text:
-                    continue
-                
-                # Escape XML characters first, then handle newlines as line breaks
-                text = escape(run.text)
-                text = text.replace('\n', '<br/>')  # Convert newlines to line breaks
-                
-                # Extract actual font and size from this run
-                run_font = default_font
-                run_size = default_size
-                
-                if run.font.name:
-                    run_font = run.font.name
-                
-                if run.font.size:
-                    run_size = int(run.font.size.pt)
-                
-                # Build formatting in correct order: innermost to outermost
-                # DO NOT use inline color - rely ONLY on ParagraphStyle.textColor
-                
-                # STEP 1: Apply bold/italic (innermost - closest to text)
-                if run.bold and run.italic:
-                    text = f"<b><i>{text}</i></b>"
-                elif run.bold:
-                    text = f"<b>{text}</b>"
-                elif run.italic:
-                    text = f"<i>{text}</i>"
-                
-                # STEP 2: Apply underline (middle layer)
-                if run.underline:
-                    text = f"<u>{text}</u>"
-                
-                # STEP 3: Wrap in font tag with explicit BLACK color
-                # Double enforcement: both inline and at ParagraphStyle level
-                text = f'<font name="{run_font}" size="{run_size}" color="#000000">{text}</font>'
-                
-                formatted_text += text
-            
-            # Calculate spacing
-            space_before = 0
-            space_after = 0
-            
-            if para_format.space_before:
-                try:
-                    space_before = para_format.space_before.pt
-                except:
-                    pass
-            
-            if para_format.space_after:
-                try:
-                    space_after = para_format.space_after.pt
-                except:
-                    pass
-            
-            # Auto-add balanced spacing for professional, beautiful appearance
-            if space_after == 0:
-                # Salutation gets moderate spacing
-                if para_text.endswith(':') or para_text.endswith(','):
-                    space_after = 6
-                # Title paragraphs get good spacing
-                elif para_text.isupper() and len(para_text) < 50:
-                    space_after = 8
-                # Body paragraphs get moderate spacing
-                elif para_text.endswith('.') and len(para_text) > 50:
-                    space_after = 6
-                # Underline lines get nice spacing
-                elif para_text.startswith('___') or para_text.count('_') > 10:
-                    space_after = 8  # Good space between underline and signature
-            
-            # Calculate indentation - CRITICAL for address alignment and signature block
-            left_indent = 0
-            right_indent = 0
-            first_line_indent = 0
-            
-            if para_format.left_indent:
-                try:
-                    # Convert from EMU to points (1 inch = 914400 EMU, 1 point = 1/72 inch)
-                    if hasattr(para_format.left_indent, 'pt'):
-                        left_indent = para_format.left_indent.pt
-                    else:
-                        # Direct EMU value: divide by 12700 to get points
-                        left_indent = float(para_format.left_indent) / 12700
-                except Exception as e:
-                    logger.debug(f"Could not calculate left indent: {e}")
-            
-            if para_format.right_indent:
-                try:
-                    if hasattr(para_format.right_indent, 'pt'):
-                        right_indent = para_format.right_indent.pt
-                    else:
-                        right_indent = float(para_format.right_indent) / 12700
-                except Exception as e:
-                    logger.debug(f"Could not calculate right indent: {e}")
-            
-            # CRITICAL: Handle first-line indent (for hanging indents like signature block)
-            if para_format.first_line_indent:
-                try:
-                    if hasattr(para_format.first_line_indent, 'pt'):
-                        first_line_indent = para_format.first_line_indent.pt
-                    else:
-                        first_line_indent = float(para_format.first_line_indent) / 12700
-                except Exception as e:
-                    logger.debug(f"Could not calculate first line indent: {e}")
-            
-            # Process text alignment and indentation
-            # For short paragraphs with large left indent, use LEFT alignment instead
-            if alignment == TA_JUSTIFY and left_indent > 200 and len(para_text) < 50:
-                alignment = TA_LEFT
-                logger.debug(f"Changed JUSTIFY to LEFT for short indented text: '{para_text[:30]}'")
-            
-            # Create paragraph style with all calculated values
-            # Use explicit black color (0,0,0) to ensure no color variations
-            black_color = HexColor('#000000')
-            
-            style = ParagraphStyle(
-                'CustomStyle',
-                fontName=default_font,
-                fontSize=default_size,
-                leading=line_spacing,
-                alignment=alignment,
-                spaceBefore=space_before,
-                spaceAfter=space_after,
-                leftIndent=left_indent,
-                rightIndent=right_indent,
-                firstLineIndent=first_line_indent,  # CRITICAL for hanging indents
-                textColor=black_color,  # Explicit black: #000000
-                bulletColor=black_color,  # Ensure bullets are black too
-                linkUnderline=False  # Disable link styling
-            )
-            
-            # Add paragraph to story
-            story.append(Paragraph(formatted_text, style))
-        
-        # Build PDF
-        pdf_doc.build(story)
-        logger.info(f"Enhanced PDF conversion completed: {pdf_path}")
-        return pdf_path
+
     
 # FIXED Batch Processing - No threading, proper context management
 def process_batch(template_ids, user_inputs, user_name, user_email=None):
@@ -1023,14 +758,9 @@ def generate():
         output_path = os.path.join(app.config['GENERATED_FOLDER'], doc.file_path)
         if format == 'docx':
             return send_file(output_path, as_attachment=True, download_name=doc.original_filename)
-        elif format == 'pdf':
-            try:
-                success, pdf_path = Document.convert_docx_to_pdf(output_path)
-                if success:
-                    return send_file(pdf_path, as_attachment=True, download_name=doc.original_filename.replace('.docx', '.pdf'))
-                else:
-                    flash('PDF conversion failed. See logs for details.', 'error')
-                    return redirect(url_for('index'))
+        else:
+            flash('Only DOCX format is supported', 'error')
+            return redirect(url_for('index'))
             except Exception as e:
                 flash(str(e), 'error')
                 return redirect(url_for('index'))
@@ -1052,16 +782,8 @@ def download(document_id, format):
 
     if format == 'docx':
         return send_file(docx_path, as_attachment=True, download_name=document.original_filename)
-    elif format == 'pdf':
-        pdf_path = docx_path.replace('.docx', '.pdf')
-        if not os.path.exists(pdf_path):
-            success, converted_pdf_path = Document.convert_docx_to_pdf(docx_path)
-            if success:
-                document.conversion_method = 'docx2pdf'
-                db.session.commit()
-                return send_file(converted_pdf_path, as_attachment=True, download_name=document.original_filename.replace('.docx', '.pdf'))
-            else:
-                abort(500, description="PDF conversion failed")
+    else:
+        abort(400, description="Only DOCX format is supported")
     abort(400)
 
 @app.route('/batch', methods=['GET', 'POST'])
@@ -1165,11 +887,7 @@ def batch_download(batch_id):
                     # Add DOCX file to ZIP
                     zip_file.write(docx_path, doc.original_filename)
                     
-                    # Also add PDF version if it exists
-                    pdf_path = docx_path.replace('.docx', '.pdf')
-                    if os.path.exists(pdf_path):
-                        pdf_filename = doc.original_filename.replace('.docx', '.pdf')
-                        zip_file.write(pdf_path, pdf_filename)
+                    # PDF support removed - DOCX only now
         
         zip_buffer.seek(0)
         
