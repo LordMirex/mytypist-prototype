@@ -611,17 +611,6 @@ class DocumentProcessor:
         except Exception as e:
             logger.error(f"Document generation failed: {str(e)}")
             raise
-
-    
-    
-    @staticmethod
-    def _get_temp_path(filename):
-        """Get path in the temporary storage directory."""
-        temp_dir = os.path.join(current_app.root_path, 'generated')
-        os.makedirs(temp_dir, exist_ok=True)
-        return os.path.join(temp_dir, filename)
-        
-
     
 # FIXED Batch Processing - No threading, proper context management
 def process_batch(template_ids, user_inputs, user_name, user_email=None):
@@ -745,8 +734,9 @@ def generate():
     format = request.form['format']
     user_inputs = {k: v for k, v in request.form.items() if k not in ['template_id', 'format']}
     
-    # Fix date ordinal casing in all inputs (18Th -> 18th, etc.)
-    user_inputs = {k: fix_date_ordinal_casing(v) if isinstance(v, str) else v 
+    # Fix date ordinal casing in date-related inputs (18Th -> 18th, etc.)
+    date_fields = ['date', 'time', 'created_at', 'updated_at', 'birth_date', 'issue_date']
+    user_inputs = {k: fix_date_ordinal_casing(v) if isinstance(v, str) and any(field in k.lower() for field in date_fields) else v 
                    for k, v in user_inputs.items()}
 
     # Extract user identification from inputs
@@ -758,12 +748,19 @@ def generate():
         output_path = os.path.join(app.config['GENERATED_FOLDER'], doc.file_path)
         if format == 'docx':
             return send_file(output_path, as_attachment=True, download_name=doc.original_filename)
+        elif format == 'pdf':
+            # TODO: Implement PDF conversion
+            # pdf_path = output_path.replace('.docx', '.pdf')
+            # convert_docx_to_pdf(output_path, pdf_path)
+            # return send_file(pdf_path, as_attachment=True, download_name=doc.original_filename.replace('.docx', '.pdf'))
+            flash('PDF conversion not yet implemented. Please use DOCX format.', 'warning')
+            return redirect(url_for('create', template_id=template_id))
         else:
-            flash('Only DOCX format is supported', 'error')
+            flash('Invalid format specified', 'error')
             return redirect(url_for('index'))
-            except Exception as e:
-                flash(str(e), 'error')
-                return redirect(url_for('index'))
+    except Exception as e:
+        flash(str(e), 'error')
+        return redirect(url_for('index'))
     except ValueError as e:
         flash(str(e), 'error')
         return redirect(url_for('create', template_id=template_id))
@@ -784,7 +781,6 @@ def download(document_id, format):
         return send_file(docx_path, as_attachment=True, download_name=document.original_filename)
     else:
         abort(400, description="Only DOCX format is supported")
-    abort(400)
 
 @app.route('/batch', methods=['GET', 'POST'])
 def batch():
@@ -886,8 +882,6 @@ def batch_download(batch_id):
                 if os.path.exists(docx_path):
                     # Add DOCX file to ZIP
                     zip_file.write(docx_path, doc.original_filename)
-                    
-                    # PDF support removed - DOCX only now
         
         zip_buffer.seek(0)
         
@@ -962,12 +956,15 @@ def batch_download_pdf(batch_id):
                 # Generate PDF if it doesn't exist
                 if not os.path.exists(pdf_path) and os.path.exists(docx_path):
                     try:
-                        success, converted_pdf_path = Document.convert_docx_to_pdf(docx_path)
-                        if success:
-                            pdf_path = converted_pdf_path
-                        else:
-                            logger.error(f"PDF conversion failed for {doc.original_filename}: {converted_pdf_path}")
-                            continue
+                        # TODO: Implement PDF conversion when ready
+                        # success, converted_pdf_path = Document.convert_docx_to_pdf(docx_path)
+                        # if success:
+                        #     pdf_path = converted_pdf_path
+                        # else:
+                        #     logger.error(f"PDF conversion failed for {doc.original_filename}: {converted_pdf_path}")
+                        #     continue
+                        logger.info(f"PDF conversion not yet implemented for {doc.original_filename}")
+                        continue
                     except Exception as e:
                         logger.error(f"PDF conversion failed for {doc.original_filename}: {str(e)}")
                         continue
