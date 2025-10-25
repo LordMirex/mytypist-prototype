@@ -30,7 +30,8 @@ app.config.update(
     SECRET_KEY=os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production'),
     SQLALCHEMY_DATABASE_URI=f'sqlite:///{os.path.join(BASE_DIR, "db", "app.db")}',
     UPLOAD_FOLDER=os.path.join(BASE_DIR, 'upload'),
-    GENERATED_FOLDER=os.path.join(BASE_DIR, 'generated'),
+    GENERATED_DOCX_FOLDER=os.path.join(BASE_DIR, 'generated', 'docx'),
+    GENERATED_PDF_FOLDER=os.path.join(BASE_DIR, 'generated', 'pdf'),
     TEMP_FOLDER=os.path.join(BASE_DIR, 'temp'),
     ADMIN_KEY=os.environ.get('ADMIN_KEY', 'SecretAdmin123'),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
@@ -55,8 +56,9 @@ logger = logging.getLogger(__name__)
 db = SQLAlchemy(app)
 
 # Ensure directories exist
-for folder in [app.config['UPLOAD_FOLDER'], app.config['GENERATED_FOLDER'],
-               app.config['TEMP_FOLDER'], os.path.join(BASE_DIR, 'db')]:
+for folder in [app.config['UPLOAD_FOLDER'], app.config['GENERATED_DOCX_FOLDER'],
+               app.config['GENERATED_PDF_FOLDER'], app.config['TEMP_FOLDER'], 
+               os.path.join(BASE_DIR, 'db')]:
     os.makedirs(folder, exist_ok=True)
 
 # Enhanced Database Models
@@ -309,6 +311,7 @@ class DocumentProcessor:
                             errors.append(f"{ph.display_name or base_name} is invalid")
         return errors
 
+
     @staticmethod
     def prepare_context(template, user_inputs, preserve_original_formatting=True):
         """Prepare rendering context preserving original document formatting."""
@@ -334,6 +337,8 @@ class DocumentProcessor:
                 logger.info(f"Address formatting for {ph.name}: '{original_value}' -> '{value}' (template: {template.type})")
             
             value = DocumentProcessor.apply_casing(value, ph.casing)
+            if ph.placeholder_type == 'date':
+                value = fix_date_ordinal_casing(value)
 
             # For professional output, use plain text to preserve original document formatting
             # RichText overrides can destroy the carefully crafted template formatting
@@ -535,6 +540,97 @@ class DocumentProcessor:
             
         return []
 
+
+    @staticmethod
+    def convert_docx_to_pdf(docx_path: str, pdf_path: str) -> tuple:
+        """
+        Convert DOCX to PDF using Spire.Doc-Free
+        
+        Args:
+            docx_path: Full path to source DOCX file
+            pdf_path: Full path for output PDF file
+        
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        try:
+            logger.info(f"Starting PDF conversion: {docx_path} -> {pdf_path}")
+            
+            # Validate input file exists
+            if not os.path.exists(docx_path):
+                logger.error(f"Source file not found: {docx_path}")
+                return (False, f"Source file not found: {docx_path}")
+            
+            logger.info(f"Source file exists, size: {os.path.getsize(docx_path)} bytes")
+            
+            # Try to import Spire.Doc
+            try:
+                from spire.doc import Document
+                from spire.doc import FileFormat
+                logger.info("Spire.Doc imported successfully")
+            except ImportError as e:
+                logger.error(f"Failed to import Spire.Doc: {str(e)}")
+                return (False, f"Failed to import Spire.Doc: {str(e)}")
+            
+            # Ensure PDF directory exists
+            pdf_dir = os.path.dirname(pdf_path)
+            if not os.path.exists(pdf_dir):
+                os.makedirs(pdf_dir, exist_ok=True)
+                logger.info(f"Created PDF directory: {pdf_dir}")
+            
+            # Load DOCX
+            logger.info("Loading DOCX file...")
+            document = Document()
+            document.LoadFromFile(docx_path)
+            logger.info("DOCX loaded successfully")
+            
+            # Convert to PDF
+            logger.info("Converting to PDF...")
+            document.SaveToFile(pdf_path, FileFormat.PDF)
+            logger.info("PDF conversion completed")
+            
+            # Release resources
+            document.Close()
+            logger.info("Document resources released")
+            
+            # Verify PDF was created
+            if os.path.exists(pdf_path):
+                pdf_size = os.path.getsize(pdf_path)
+                logger.info(f"PDF created successfully: {pdf_path} (size: {pdf_size} bytes)")
+                return (True, pdf_path)
+            else:
+                logger.error("PDF file was not created")
+                return (False, "PDF file was not created")
+                
+        except ImportError as e:
+            logger.error(f"Spire.Doc library not installed: {str(e)}")
+            return (False, "PDF conversion library not available. Please contact administrator.")
+        except Exception as e:
+            logger.error(f"PDF conversion failed for {docx_path}: {str(e)}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            return (False, f"Conversion error: {str(e)}")
+
+    @staticmethod
+    def get_pdf_path(docx_path: str, docx_folder: str, pdf_folder: str) -> str:
+        """
+        Convert DOCX path to corresponding PDF path
+        
+        Args:
+            docx_path: Path to DOCX file
+            docx_folder: Base folder for DOCX files
+            pdf_folder: Base folder for PDF files
+        
+        Returns:
+            str: Path for PDF file
+        """
+        # Get filename from DOCX path
+        docx_filename = os.path.basename(docx_path)
+        # Replace extension
+        pdf_filename = docx_filename.replace('.docx', '.pdf')
+        # Build PDF path
+        return os.path.join(pdf_folder, pdf_filename)
+
     @staticmethod
     def generate_document(template_id, user_inputs, user_name, user_email=None):
         """Generate a professional-quality document preserving original formatting."""
@@ -558,7 +654,7 @@ class DocumentProcessor:
 
             # Save the document immediately to preserve formatting integrity
             output_filename = f"{uuid.uuid4()}.docx"
-            output_path = os.path.join(app.config['GENERATED_FOLDER'], output_filename)
+            output_path = os.path.join(app.config['GENERATED_DOCX_FOLDER'], output_filename)
             doc.save(output_path)
 
             # Post-process only if absolutely necessary for critical fixes
@@ -709,20 +805,14 @@ def fix_date_ordinal_casing(text):
     """
     Fix ordinal suffix casing in dates intelligently:
     - If text is ALL UPPERCASE: keep it (19TH SEPTEMBER stays 19TH SEPTEMBER)
-    - If text is Title/Mixed case: lowercase ordinals (19Th September → 19th September)
+    - Otherwise: lowercase ordinals (19Th September to 19th September)
     """
     import re
-    
-    # Check if the entire text is uppercase (user wants uppercase formatting)
     if text.isupper():
-        return text  # Keep 19TH SEPTEMBER, 2025 as is
-    
-    # Otherwise, fix ordinal suffixes to lowercase: Th/St/Nd/Rd → th/st/nd/rd
-    # This handles: 19Th September → 19th September
-    text = re.sub(r'(\d+)(Th|St|Nd|Rd)\b', 
-                  lambda m: m.group(1) + m.group(2).lower(), 
+        return text
+    return re.sub(r'(\d+)(Th|St|Nd|Rd)\b',
+                  lambda m: m.group(1) + m.group(2).lower(),
                   text)
-    return text
 
 @app.route('/generate', methods=['POST'])
 def generate():
@@ -744,17 +834,38 @@ def generate():
     user_email = user_inputs.get('email', None)
 
     try:
+        # Generate DOCX
         doc = DocumentProcessor.generate_document(template_id, user_inputs, user_name, user_email)
-        output_path = os.path.join(app.config['GENERATED_FOLDER'], doc.file_path)
+        docx_path = os.path.join(app.config['GENERATED_DOCX_FOLDER'], doc.file_path)
+        
         if format == 'docx':
-            return send_file(output_path, as_attachment=True, download_name=doc.original_filename)
+            # Return DOCX directly
+            return send_file(docx_path, as_attachment=True, download_name=doc.original_filename)
+        
         elif format == 'pdf':
-            # TODO: Implement PDF conversion
-            # pdf_path = output_path.replace('.docx', '.pdf')
-            # convert_docx_to_pdf(output_path, pdf_path)
-            # return send_file(pdf_path, as_attachment=True, download_name=doc.original_filename.replace('.docx', '.pdf'))
-            flash('PDF conversion not yet implemented. Please use DOCX format.', 'warning')
-            return redirect(url_for('create', template_id=template_id))
+            # Get PDF path
+            pdf_path = DocumentProcessor.get_pdf_path(
+                docx_path, 
+                app.config['GENERATED_DOCX_FOLDER'], 
+                app.config['GENERATED_PDF_FOLDER']
+            )
+            
+            # Check if PDF already exists (caching)
+            if not os.path.exists(pdf_path):
+                logger.info(f"Converting to PDF: {doc.original_filename}")
+                success, message = DocumentProcessor.convert_docx_to_pdf(docx_path, pdf_path)
+                
+                if not success:
+                    logger.error(f"PDF conversion failed: {message}")
+                    flash(f'PDF conversion failed: {message}. Downloading DOCX instead.', 'warning')
+                    return send_file(docx_path, as_attachment=True, download_name=doc.original_filename)
+            else:
+                logger.info(f"Using cached PDF: {doc.original_filename}")
+            
+            # Return PDF
+            pdf_filename = doc.original_filename.replace('.docx', '.pdf')
+            return send_file(pdf_path, as_attachment=True, download_name=pdf_filename)
+        
         else:
             flash('Invalid format specified', 'error')
             return redirect(url_for('index'))
@@ -773,14 +884,40 @@ def results(document_id):
 @app.route('/download/<int:document_id>/<string:format>')
 def download(document_id, format):
     document = CreatedDocument.query.get_or_404(document_id)
-    docx_path = os.path.join(app.config['GENERATED_FOLDER'], document.file_path)
+    docx_path = os.path.join(app.config['GENERATED_DOCX_FOLDER'], document.file_path)
+    
     if not os.path.exists(docx_path):
-        abort(404)
-
+        abort(404, description="Document file not found")
+    
     if format == 'docx':
         return send_file(docx_path, as_attachment=True, download_name=document.original_filename)
+    
+    elif format == 'pdf':
+        # Get PDF path
+        pdf_path = DocumentProcessor.get_pdf_path(
+            docx_path, 
+            app.config['GENERATED_DOCX_FOLDER'], 
+            app.config['GENERATED_PDF_FOLDER']
+        )
+        
+        # Check if PDF already exists (caching)
+        if not os.path.exists(pdf_path):
+            logger.info(f"Converting to PDF on-demand: {document.original_filename}")
+            success, message = DocumentProcessor.convert_docx_to_pdf(docx_path, pdf_path)
+            
+            if not success:
+                logger.error(f"PDF conversion failed: {message}")
+                flash(f'PDF conversion failed: {message}. Downloading DOCX instead.', 'warning')
+                return send_file(docx_path, as_attachment=True, download_name=document.original_filename)
+        else:
+            logger.info(f"Serving cached PDF: {document.original_filename}")
+        
+        # Return PDF
+        pdf_filename = document.original_filename.replace('.docx', '.pdf')
+        return send_file(pdf_path, as_attachment=True, download_name=pdf_filename)
+    
     else:
-        abort(400, description="Only DOCX format is supported")
+        abort(400, description="Invalid format specified")
 
 @app.route('/batch', methods=['GET', 'POST'])
 def batch():
@@ -865,7 +1002,7 @@ def batch_results(batch_id):
 
 @app.route('/batch_download/<string:batch_id>')
 def batch_download(batch_id):
-    """Download all documents from a batch as a ZIP file."""
+    """Download all PDF documents from a batch as a ZIP file (default behavior)."""
     batch = BatchGeneration.query.filter_by(batch_id=batch_id).first_or_404()
     documents = CreatedDocument.query.filter_by(batch_id=batch_id).all()
     
@@ -874,19 +1011,49 @@ def batch_download(batch_id):
         return redirect(url_for('batch_results', batch_id=batch_id))
     
     try:
-        # Create a ZIP file in memory
         zip_buffer = io.BytesIO()
+        converted_count = 0
+        failed_count = 0
+        
         with ZipFile(zip_buffer, 'w') as zip_file:
             for doc in documents:
-                docx_path = os.path.join(app.config['GENERATED_FOLDER'], doc.file_path)
-                if os.path.exists(docx_path):
-                    # Add DOCX file to ZIP
-                    zip_file.write(docx_path, doc.original_filename)
+                docx_path = os.path.join(app.config['GENERATED_DOCX_FOLDER'], doc.file_path)
+                
+                # Get corresponding PDF path
+                pdf_path = DocumentProcessor.get_pdf_path(
+                    docx_path, 
+                    app.config['GENERATED_DOCX_FOLDER'], 
+                    app.config['GENERATED_PDF_FOLDER']
+                )
+                
+                # Convert if PDF doesn't exist
+                if not os.path.exists(pdf_path) and os.path.exists(docx_path):
+                    logger.info(f"Converting batch document to PDF: {doc.original_filename}")
+                    success, message = DocumentProcessor.convert_docx_to_pdf(docx_path, pdf_path)
+                    
+                    if not success:
+                        logger.error(f"Failed to convert {doc.original_filename}: {message}")
+                        failed_count += 1
+                        continue  # Skip this document
+                
+                # Add PDF to ZIP if it exists
+                if os.path.exists(pdf_path):
+                    pdf_filename = doc.original_filename.replace('.docx', '.pdf')
+                    zip_file.write(pdf_path, pdf_filename)
+                    converted_count += 1
+                    logger.info(f"Added to ZIP: {pdf_filename}")
+                else:
+                    failed_count += 1
         
         zip_buffer.seek(0)
         
-        # Send the ZIP file
-        zip_filename = f"batch_{batch_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        # Inform user of results
+        if failed_count > 0:
+            flash(f'Generated {converted_count} PDFs in ZIP. {failed_count} conversions failed.', 'warning')
+        else:
+            flash(f'Successfully generated ZIP with {converted_count} PDFs', 'success')
+        
+        zip_filename = f"batch_pdf_{batch_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
         return send_file(
             zip_buffer,
             as_attachment=True,
@@ -895,10 +1062,10 @@ def batch_download(batch_id):
         )
         
     except Exception as e:
-        logger.error(f"Error creating batch download: {str(e)}")
-        flash('Error creating batch download. Please try downloading documents individually.', 'error')
+        logger.error(f"Error creating PDF batch download: {str(e)}")
+        flash('Error creating PDF batch download. Please try individual downloads.', 'error')
         return redirect(url_for('batch_results', batch_id=batch_id))
-
+        
 @app.route('/batch_download_docx/<string:batch_id>')
 def batch_download_docx(batch_id):
     """Download all DOCX documents from a batch as a ZIP file."""
@@ -914,7 +1081,7 @@ def batch_download_docx(batch_id):
         zip_buffer = io.BytesIO()
         with ZipFile(zip_buffer, 'w') as zip_file:
             for doc in documents:
-                docx_path = os.path.join(app.config['GENERATED_FOLDER'], doc.file_path)
+                docx_path = os.path.join(app.config['GENERATED_DOCX_FOLDER'], doc.file_path)
                 if os.path.exists(docx_path):
                     # Add only DOCX file to ZIP
                     zip_file.write(docx_path, doc.original_filename)
@@ -946,37 +1113,48 @@ def batch_download_pdf(batch_id):
         return redirect(url_for('batch_results', batch_id=batch_id))
     
     try:
-        # Create a ZIP file in memory with only PDF files
         zip_buffer = io.BytesIO()
+        converted_count = 0
+        failed_count = 0
+        
         with ZipFile(zip_buffer, 'w') as zip_file:
             for doc in documents:
-                docx_path = os.path.join(app.config['GENERATED_FOLDER'], doc.file_path)
-                pdf_path = docx_path.replace('.docx', '.pdf')
+                docx_path = os.path.join(app.config['GENERATED_DOCX_FOLDER'], doc.file_path)
                 
-                # Generate PDF if it doesn't exist
+                # Get corresponding PDF path
+                pdf_path = DocumentProcessor.get_pdf_path(
+                    docx_path, 
+                    app.config['GENERATED_DOCX_FOLDER'], 
+                    app.config['GENERATED_PDF_FOLDER']
+                )
+                
+                # Convert if PDF doesn't exist
                 if not os.path.exists(pdf_path) and os.path.exists(docx_path):
-                    try:
-                        # TODO: Implement PDF conversion when ready
-                        # success, converted_pdf_path = Document.convert_docx_to_pdf(docx_path)
-                        # if success:
-                        #     pdf_path = converted_pdf_path
-                        # else:
-                        #     logger.error(f"PDF conversion failed for {doc.original_filename}: {converted_pdf_path}")
-                        #     continue
-                        logger.info(f"PDF conversion not yet implemented for {doc.original_filename}")
-                        continue
-                    except Exception as e:
-                        logger.error(f"PDF conversion failed for {doc.original_filename}: {str(e)}")
-                        continue
+                    logger.info(f"Converting batch document to PDF: {doc.original_filename}")
+                    success, message = DocumentProcessor.convert_docx_to_pdf(docx_path, pdf_path)
+                    
+                    if not success:
+                        logger.error(f"Failed to convert {doc.original_filename}: {message}")
+                        failed_count += 1
+                        continue  # Skip this document
                 
-                # Add PDF file to ZIP if it exists
+                # Add PDF to ZIP if it exists
                 if os.path.exists(pdf_path):
                     pdf_filename = doc.original_filename.replace('.docx', '.pdf')
                     zip_file.write(pdf_path, pdf_filename)
+                    converted_count += 1
+                    logger.info(f"Added to ZIP: {pdf_filename}")
+                else:
+                    failed_count += 1
         
         zip_buffer.seek(0)
         
-        # Send the ZIP file
+        # Inform user of results
+        if failed_count > 0:
+            flash(f'Generated {converted_count} PDFs. {failed_count} conversions failed.', 'warning')
+        else:
+            flash(f'Successfully generated {converted_count} PDFs', 'success')
+        
         zip_filename = f"batch_pdf_{batch_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
         return send_file(
             zip_buffer,
@@ -987,8 +1165,21 @@ def batch_download_pdf(batch_id):
         
     except Exception as e:
         logger.error(f"Error creating PDF batch download: {str(e)}")
-        flash('Error creating PDF batch download. Please try downloading documents individually.', 'error')
+        flash('Error creating PDF batch download. Please try individual downloads.', 'error')
         return redirect(url_for('batch_results', batch_id=batch_id))
+
+# @app.route('/test_pdf')
+# def test_pdf():
+#     """Test PDF conversion functionality"""
+#     try:
+#         # Test import
+#         from spire.doc import Document
+#         from spire.doc import FileFormat
+#         return "✅ Spire.Doc-Free import successful!"
+#     except ImportError as e:
+#         return f"❌ Import failed: {str(e)}"
+#     except Exception as e:
+#         return f"❌ Error: {str(e)}"
 
 @app.route('/admin')
 def admin():
@@ -1233,25 +1424,29 @@ def admin_clear_database():
         abort(403)
     
     try:
-        # Delete all files in generated folder
         import shutil
-        if os.path.exists(app.config['GENERATED_FOLDER']):
-            shutil.rmtree(app.config['GENERATED_FOLDER'])
-            os.makedirs(app.config['GENERATED_FOLDER'], exist_ok=True)
         
-        # Delete all files in upload folder
+        # Delete DOCX folder
+        if os.path.exists(app.config['GENERATED_DOCX_FOLDER']):
+            shutil.rmtree(app.config['GENERATED_DOCX_FOLDER'])
+            os.makedirs(app.config['GENERATED_DOCX_FOLDER'], exist_ok=True)
+        
+        # Delete PDF folder
+        if os.path.exists(app.config['GENERATED_PDF_FOLDER']):
+            shutil.rmtree(app.config['GENERATED_PDF_FOLDER'])
+            os.makedirs(app.config['GENERATED_PDF_FOLDER'], exist_ok=True)
+        
+        # Delete upload folder
         if os.path.exists(app.config['UPLOAD_FOLDER']):
             shutil.rmtree(app.config['UPLOAD_FOLDER'])
             os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
         
-        # Clear all database tables
+        # Clear database
         db.drop_all()
         db.create_all()
-        
-        # Clear all caches
         cache.clear()
         
-        flash('Database and all files cleared successfully! Starting fresh.', 'success')
+        flash('Database and all files cleared successfully!', 'success')
         logger.info("Database and files cleared by admin")
         
     except Exception as e:
@@ -1297,24 +1492,28 @@ def delete_document(document_id):
     
     # Background file deletion - don't wait for file operations
     try:
-        docx_path = os.path.join(app.config['GENERATED_FOLDER'], doc.file_path)
-        pdf_path = doc.file_path.replace('.docx', '.pdf')
-        pdf_full_path = os.path.join(app.config['GENERATED_FOLDER'], pdf_path)
+        docx_path = os.path.join(app.config['GENERATED_DOCX_FOLDER'], doc.file_path)
+        pdf_path = DocumentProcessor.get_pdf_path(
+            docx_path, 
+            app.config['GENERATED_DOCX_FOLDER'], 
+            app.config['GENERATED_PDF_FOLDER']
+        )
         
-        # Delete files in background to avoid blocking the UI
         import threading
         def delete_files():
             try:
                 if os.path.exists(docx_path):
                     os.remove(docx_path)
-                if os.path.exists(pdf_full_path):
-                    os.remove(pdf_full_path)
-            except:
-                pass
+                    logger.info(f"Deleted DOCX: {docx_path}")
+                if os.path.exists(pdf_path):
+                    os.remove(pdf_path)
+                    logger.info(f"Deleted PDF: {pdf_path}")
+            except Exception as e:
+                logger.error(f"Error deleting files: {str(e)}")
         
         threading.Thread(target=delete_files, daemon=True).start()
-    except:
-        pass
+    except Exception as e:
+        logger.error(f"Error initiating file deletion: {str(e)}")
     
     # Immediate database deletion
     db.session.delete(doc)

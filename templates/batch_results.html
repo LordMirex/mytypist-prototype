@@ -37,9 +37,7 @@
                         </button>
                     </div>
                     <div class="btn-group me-2" role="group">
-                        <a href="{{ url_for('batch_download', batch_id=batch.batch_id) }}" class="btn btn-success">
-                            <i class="fas fa-download"></i> Download All as ZIP
-                        </a>
+                        <a href="{{ url_for('batch_download', batch_id=batch.batch_id) }}" class="btn btn-primary">Download Batch as ZIP (PDFs)</a>
                     </div>
                     <a href="{{ url_for('batch') }}" class="btn btn-secondary">Generate Another Batch</a>
                 </div>
